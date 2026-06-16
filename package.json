@@ -1,0 +1,17 @@
+{
+  "name": "standupcrossfit",
+  "version": "1.0.0",
+  "private": true,
+  "description": "StandUp CrossFit - run backend (.NET API) and frontend (Vite) together",
+  "scripts": {
+    "dev": "concurrently -k -n API,WEB -c blue,green \"npm:dev:backend\" \"npm:dev:frontend\"",
+    "dev:backend": "cd backend && DOTNET_ROLL_FORWARD=Major ASPNETCORE_ENVIRONMENT=Development ASPNETCORE_URLS=http://localhost:5050 dotnet watch run",
+    "dev:frontend": "cd frontend && npm run dev",
+    "start": "npm run dev",
+    "setup": "npm install && cd frontend && npm install && cd ../backend && DOTNET_ROLL_FORWARD=Major ASPNETCORE_ENVIRONMENT=Development dotnet ef database update",
+    "db:update": "cd backend && DOTNET_ROLL_FORWARD=Major ASPNETCORE_ENVIRONMENT=Development dotnet ef database update"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2"
+  }
+}

@@ -1,0 +1,53 @@
+version: '3.8'
+
+services:
+  db:
+    image: mysql:8.0
+    container_name: standup_db
+    environment:
+      MYSQL_ROOT_PASSWORD: root123
+      MYSQL_DATABASE: standup_fitness
+      MYSQL_USER: standup_user
+      MYSQL_PASSWORD: standup123
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      timeout: 20s
+      retries: 10
+
+  api:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: standup_api
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ConnectionStrings__DefaultConnection=Server=db;Port=3306;Database=standup_fitness;User=root;Password=root123;
+    ports:
+      - "5000:5000"
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - ./backend:/app
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: standup_frontend
+    ports:
+      - "5173:5173"
+    environment:
+      - VITE_API_URL=http://api:5000/api
+    depends_on:
+      - api
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+
+volumes:
+  mysql_data:
