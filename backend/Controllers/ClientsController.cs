@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Authorization;
+using System.ComponentModel.DataAnnotations;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using StandUpFitness.Data;
@@ -146,11 +147,13 @@ public class ClientsController : ControllerBase
             Role = UserRole.Client
         };
 
+        var plan = await _context.MembershipPlans.FirstOrDefaultAsync(p => p.Name == request.MembershipType);
         var client = new Client
         {
             User = user,
             MembershipType = request.MembershipType ?? "standard",
-            MembershipExpiry = request.MembershipExpiry ?? DateTime.UtcNow.AddMonths(1),
+            PlanId = plan?.Id,
+            MembershipExpiry = request.MembershipExpiry ?? (plan != null ? DateTime.UtcNow.AddDays(plan.DurationDays) : DateTime.UtcNow.AddMonths(1)),
             IsActive = true
         };
 
@@ -202,7 +205,11 @@ public class ClientsController : ControllerBase
             return NotFound();
 
         client.User.Name = request.Name ?? client.User.Name;
-        client.MembershipType = request.MembershipType ?? client.MembershipType;
+        if (request.MembershipType != null)
+        {
+            client.MembershipType = request.MembershipType;
+            client.PlanId = (await _context.MembershipPlans.FirstOrDefaultAsync(p => p.Name == request.MembershipType))?.Id;
+        }
         client.MembershipExpiry = request.MembershipExpiry ?? client.MembershipExpiry;
         client.IsActive = request.IsActive ?? client.IsActive;
 
@@ -228,7 +235,8 @@ public class ClientsController : ControllerBase
         if (client == null)
             return NotFound();
 
-        _context.Clients.Remove(client);
+        client.IsDeleted = true;
+        client.DeletedAt = DateTime.UtcNow;
         await _context.SaveChangesAsync();
 
         return Ok(new { message = "Client deleted successfully" });
@@ -322,12 +330,12 @@ public class ClientsController : ControllerBase
 
 public class CreateClientRequest
 {
-    public string Name { get; set; } = null!;
-    public string Email { get; set; } = null!;
-    public string Password { get; set; } = null!;
-    public string? MembershipType { get; set; } = "standard";
+    [Required, MaxLength(120)] public string Name { get; set; } = null!;
+    [Required, EmailAddress, MaxLength(256)] public string Email { get; set; } = null!;
+    [Required, MinLength(6), MaxLength(128)] public string Password { get; set; } = null!;
+    [MaxLength(60)] public string? MembershipType { get; set; } = "standard";
     public DateTime? MembershipExpiry { get; set; }
-    public decimal MembershipPrice { get; set; } = 0;
+    [Range(0, 1_000_000)] public decimal MembershipPrice { get; set; } = 0;
 }
 
 public class UpdateClientRequest

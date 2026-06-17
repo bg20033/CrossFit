@@ -55,6 +55,14 @@ public class InvoiceController : ControllerBase
         if (client == null)
             return BadRequest("Client not found");
 
+        // Idempotency: dedupe retries/double-clicks.
+        if (!string.IsNullOrEmpty(request.IdempotencyKey))
+        {
+            var dup = await _context.Invoices.FirstOrDefaultAsync(i => i.IdempotencyKey == request.IdempotencyKey);
+            if (dup != null)
+                return Ok(new { message = "Invoice already created", id = dup.Id, invoiceNumber = dup.InvoiceNumber, totalAmount = dup.TotalAmount, idempotent = true });
+        }
+
         var invoiceNumber = $"INV-{DateTime.UtcNow:yyyyMMdd}-{new Random().Next(1000, 9999)}";
         var subtotal = request.Items.Sum(i => i.Quantity * i.UnitPrice);
         var taxAmount = subtotal * (request.TaxPercent / 100);
@@ -71,6 +79,7 @@ public class InvoiceController : ControllerBase
             TotalAmount = totalAmount,
             DueDate = request.DueDate ?? DateTime.UtcNow.AddDays(30),
             PaymentMethod = request.PaymentMethod,
+            IdempotencyKey = request.IdempotencyKey,
             Status = "pending"
         };
 
@@ -194,6 +203,7 @@ public class CreateInvoiceRequest
     public decimal TaxPercent { get; set; } = 0;
     public string PaymentMethod { get; set; } = "cash";
     public DateTime? DueDate { get; set; }
+    public string? IdempotencyKey { get; set; }
 }
 
 public class InvoiceItemRequest

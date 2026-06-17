@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
+using System.ComponentModel.DataAnnotations;
 using Microsoft.IdentityModel.Tokens;
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Cryptography;
@@ -175,26 +176,36 @@ public class AuthController : ControllerBase
 
 public class RegisterRequest
 {
+    [Required, EmailAddress, MaxLength(256)]
     public string Email { get; set; } = null!;
+    [Required, MinLength(6), MaxLength(128)]
     public string Password { get; set; } = null!;
+    [Required, MaxLength(120)]
     public string Name { get; set; } = null!;
+    [Required, MaxLength(40)]
     public string Role { get; set; } = "client";
 }
 
 public class LoginRequest
 {
+    [Required, EmailAddress, MaxLength(256)]
     public string Email { get; set; } = null!;
+    [Required, MaxLength(128)]
     public string Password { get; set; } = null!;
 }
 
 public class UpdateProfileRequest
 {
+    [MaxLength(120)]
     public string? Name { get; set; }
+    [EmailAddress, MaxLength(256)]
     public string? Email { get; set; }
 }
 
 public class ChangePasswordRequest
 {
+    [Required, MaxLength(128)]
     public string CurrentPassword { get; set; } = null!;
+    [Required, MinLength(6), MaxLength(128)]
     public string NewPassword { get; set; } = null!;
 }

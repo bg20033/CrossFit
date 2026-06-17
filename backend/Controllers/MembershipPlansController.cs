@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Authorization;
+using System.ComponentModel.DataAnnotations;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using StandUpFitness.Data;
@@ -77,7 +78,8 @@ public class MembershipPlansController : ControllerBase
     {
         var plan = await _context.MembershipPlans.FindAsync(id);
         if (plan == null) return NotFound();
-        _context.MembershipPlans.Remove(plan);
+        plan.IsDeleted = true;
+        plan.DeletedAt = DateTime.UtcNow;
         await _context.SaveChangesAsync();
         return Ok(new { message = "Deleted" });
     }
@@ -85,9 +87,9 @@ public class MembershipPlansController : ControllerBase
 
 public class MembershipPlanRequest
 {
-    public string Name { get; set; } = null!;
-    public int DurationDays { get; set; }
-    public decimal Price { get; set; }
-    public string? Description { get; set; }
+    [Required, MaxLength(80)] public string Name { get; set; } = null!;
+    [Range(1, 3650)] public int DurationDays { get; set; }
+    [Range(0, 1_000_000)] public decimal Price { get; set; }
+    [MaxLength(500)] public string? Description { get; set; }
     public bool? IsActive { get; set; }
 }

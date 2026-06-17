@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Authorization;
+using System.ComponentModel.DataAnnotations;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using StandUpFitness.Data;
@@ -232,12 +233,12 @@ public class TrainersController : ControllerBase
 
 public class CreateTrainerRequest
 {
-    public string Name { get; set; } = null!;
-    public string Email { get; set; } = null!;
-    public string Password { get; set; } = null!;
-    public string Specialization { get; set; } = null!;
-    public string? Bio { get; set; }
-    public decimal HourlyRate { get; set; }
+    [Required, MaxLength(120)] public string Name { get; set; } = null!;
+    [Required, EmailAddress, MaxLength(256)] public string Email { get; set; } = null!;
+    [Required, MinLength(6), MaxLength(128)] public string Password { get; set; } = null!;
+    [MaxLength(120)] public string Specialization { get; set; } = null!;
+    [MaxLength(1000)] public string? Bio { get; set; }
+    [Range(0, 100_000)] public decimal HourlyRate { get; set; }
 }
 
 public class UpdateTrainerRequest

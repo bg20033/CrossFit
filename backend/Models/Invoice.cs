@@ -17,6 +17,9 @@ public class Invoice
     public string PaymentMethod { get; set; } = "cash"; // cash, card, transfer
     public string? Notes { get; set; }
     public string? PdfFile { get; set; }
+    public string? IdempotencyKey { get; set; }
+    public bool IsDeleted { get; set; }
+    public DateTime? DeletedAt { get; set; }
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
 

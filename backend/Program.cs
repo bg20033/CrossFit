@@ -8,10 +8,14 @@ using StandUpFitness.Data;
 
 var builder = WebApplication.CreateBuilder(args);
 
-builder.Services.AddControllers();
+builder.Services.AddControllers(options =>
+{
+    options.Filters.Add<StandUpFitness.Infrastructure.AuditActionFilter>();
+});
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 builder.Services.AddProblemDetails();
+builder.Services.AddHealthChecks();
 
 // Database
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
@@ -103,6 +107,7 @@ app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapControllers();
+app.MapHealthChecks("/health");
 
 // Apply migrations automatically only in Development; production migrates via deploy pipeline.
 if (app.Environment.IsDevelopment())

@@ -31,6 +31,7 @@ public class FitnessContext : DbContext
     public DbSet<MembershipPlan> MembershipPlans { get; set; } = null!;
     public DbSet<ProgressLog> ProgressLogs { get; set; } = null!;
     public DbSet<RentalInquiry> RentalInquiries { get; set; } = null!;
+    public DbSet<AuditLog> AuditLogs { get; set; } = null!;
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -41,6 +42,27 @@ public class FitnessContext : DbContext
             .WithMany()
             .HasForeignKey(p => p.ClientId)
             .OnDelete(DeleteBehavior.Cascade);
+
+        // Soft-delete global query filters (deleted rows are hidden from all queries)
+        modelBuilder.Entity<Client>().HasQueryFilter(c => !c.IsDeleted);
+        modelBuilder.Entity<Invoice>().HasQueryFilter(i => !i.IsDeleted);
+        modelBuilder.Entity<MembershipPlan>().HasQueryFilter(p => !p.IsDeleted);
+
+        // Client -> MembershipPlan (optional link, keeps client if the plan is removed)
+        modelBuilder.Entity<Client>()
+            .HasOne(c => c.Plan)
+            .WithMany()
+            .HasForeignKey(c => c.PlanId)
+            .OnDelete(DeleteBehavior.SetNull);
+
+        // Idempotency keys
+        modelBuilder.Entity<Invoice>().HasIndex(i => i.IdempotencyKey);
+        modelBuilder.Entity<Finance>().HasIndex(f => f.IdempotencyKey);
+
+        // Hot-path indexes
+        modelBuilder.Entity<AttendanceLog>().HasIndex(a => new { a.ClientId, a.CheckInTime });
+        modelBuilder.Entity<Invoice>().HasIndex(i => i.Status);
+        modelBuilder.Entity<Finance>().HasIndex(f => new { f.Type, f.TransactionDate });
 
         // User configuration
         modelBuilder.Entity<User>()

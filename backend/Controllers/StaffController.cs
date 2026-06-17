@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Authorization;
+using System.ComponentModel.DataAnnotations;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using StandUpFitness.Data;
@@ -242,11 +243,11 @@ public class StaffController : ControllerBase
 
 public class CreateStaffRequest
 {
-    public string Name { get; set; } = null!;
-    public string Email { get; set; } = null!;
-    public string Password { get; set; } = null!;
-    public string Position { get; set; } = null!;
-    public decimal Salary { get; set; }
+    [Required, MaxLength(120)] public string Name { get; set; } = null!;
+    [Required, EmailAddress, MaxLength(256)] public string Email { get; set; } = null!;
+    [Required, MinLength(6), MaxLength(128)] public string Password { get; set; } = null!;
+    [Required, MaxLength(80)] public string Position { get; set; } = null!;
+    [Range(0, 1_000_000)] public decimal Salary { get; set; }
 }
 
 public class UpdateStaffRequest

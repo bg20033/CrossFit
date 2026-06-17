@@ -13,6 +13,7 @@ public class Finance
     public DateTime TransactionDate { get; set; } = DateTime.UtcNow;
     public string Status { get; set; } = "completed"; // pending, completed, cancelled
     public string PaymentMethod { get; set; } = "cash"; // cash, card, transfer
+    public string? IdempotencyKey { get; set; }
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
 

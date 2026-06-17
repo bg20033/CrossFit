@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Authorization;
+using System.ComponentModel.DataAnnotations;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using StandUpFitness.Data;
@@ -92,6 +93,14 @@ public class FinanceController : ControllerBase
         if (category == null)
             return BadRequest("Category not found");
 
+        // Idempotency: if this key was already used, return the existing transaction instead of duplicating.
+        if (!string.IsNullOrEmpty(request.IdempotencyKey))
+        {
+            var dup = await _context.Finances.FirstOrDefaultAsync(f => f.IdempotencyKey == request.IdempotencyKey);
+            if (dup != null)
+                return Ok(new { message = "Transaction already recorded", id = dup.Id, idempotent = true });
+        }
+
         var finance = new Finance
         {
             Type = request.Type,
@@ -99,6 +108,7 @@ public class FinanceController : ControllerBase
             Amount = request.Amount,
             Description = request.Description,
             PaymentMethod = request.PaymentMethod,
+            IdempotencyKey = request.IdempotencyKey,
             UserId = int.Parse(User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value ?? "0"),
             TransactionDate = request.TransactionDate ?? DateTime.UtcNow
         };
@@ -183,12 +193,14 @@ public class FinanceController : ControllerBase
 
 public class AddTransactionRequest
 {
-    public string Type { get; set; } = null!; // income or expense
+    [Required, MaxLength(20)] public string Type { get; set; } = null!; // income or expense
     public int CategoryId { get; set; }
-    public decimal Amount { get; set; }
-    public string Description { get; set; } = string.Empty;
-    public string PaymentMethod { get; set; } = "cash";
+    [Range(0.01, 10_000_000)] public decimal Amount { get; set; }
+    [MaxLength(300)] public string Description { get; set; } = string.Empty;
+    [MaxLength(20)] public string PaymentMethod { get; set; } = "cash";
     public DateTime? TransactionDate { get; set; }
+    /// <summary>Optional client key to make this POST idempotent (dedupes retries/double-clicks).</summary>
+    [MaxLength(80)] public string? IdempotencyKey { get; set; }
 }
 
 public class AddCategoryRequest
