@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useAuth } from '../contexts/AuthContext'
 import api from '../utils/api'
-import { DashboardShell, DashboardHeader, StatCard, Panel, DayStrip, StreakBadge } from '../components/DashboardKit'
+import { DashboardShell, DashboardHeader, StatCard, Panel, DayStrip, StreakBadge, WeeklyBars } from '../components/DashboardKit'
 
 interface Day {
   date: string
@@ -56,6 +56,20 @@ export default function ClientCalendar() {
 
   const markedDays = new Set((data?.days ?? []).map((d) => d.date))
 
+  // Visit counts for Mon–Sun of the week containing today.
+  const weekBars = (() => {
+    const t = new Date(todayStr)
+    const monday = new Date(t)
+    monday.setDate(t.getDate() - ((t.getDay() + 6) % 7))
+    const labels = ['Hën', 'Mar', 'Mër', 'Enj', 'Pre', 'Sht', 'Die']
+    return labels.map((label, i) => {
+      const d = new Date(monday)
+      d.setDate(monday.getDate() + i)
+      const iso = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+      return { label, value: byDate.get(iso)?.count ?? 0 }
+    })
+  })()
+
   return (
     <DashboardShell>
       <DashboardHeader
@@ -67,6 +81,11 @@ export default function ClientCalendar() {
 
       <Panel title="Kjo javë">
         <DayStrip year={cursor.year} month={cursor.month} marked={markedDays} today={todayStr} />
+        {weekBars.some((b) => b.value > 0) && (
+          <div className="mt-6 border-t border-gray-100 pt-5">
+            <WeeklyBars data={weekBars} height={130} />
+          </div>
+        )}
       </Panel>
 
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">

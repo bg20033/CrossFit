@@ -11,7 +11,7 @@ import {
   EmptyState,
   Badge,
   Modal,
-  MacroRing,
+  MacroSummary,
 } from '../components/DashboardKit'
 
 interface DietPlan {
@@ -118,20 +118,21 @@ export default function ClientDiet() {
             </div>
             {macros && (
               <div>
-                <p className="mb-2 text-sm font-semibold text-gray-700">Makro ditore</p>
-                <div className="flex flex-wrap justify-around gap-3 rounded-xl bg-gray-50 p-4">
-                  {macros.protein != null && (
-                    <MacroRing label="Proteina" value={macros.protein} goal={goals.protein ?? macros.protein} color="#FB5A5C" />
-                  )}
-                  {macros.carbs != null && (
-                    <MacroRing label="Karbo" value={macros.carbs} goal={goals.carbs ?? macros.carbs} color="#F59E0B" />
-                  )}
-                  {macros.fat != null && (
-                    <MacroRing label="Yndyra" value={macros.fat} goal={goals.fat ?? macros.fat} color="#0EA5E9" />
-                  )}
-                  {macros.calories != null && (
-                    <MacroRing label="Kalori" value={macros.calories} goal={goals.calories ?? macros.calories} unit="" color="#10B981" />
-                  )}
+                <p className="mb-3 text-sm font-semibold text-gray-700">Makro ditore</p>
+                <div className="rounded-xl bg-gray-50 p-4">
+                  <MacroSummary
+                    calories={macros.calories ?? Math.round((macros.protein ?? 0) * 4 + (macros.carbs ?? 0) * 4 + (macros.fat ?? 0) * 9)}
+                    caloriesGoal={
+                      goals.calories ??
+                      macros.calories ??
+                      Math.round((goals.protein ?? macros.protein ?? 0) * 4 + (goals.carbs ?? macros.carbs ?? 0) * 4 + (goals.fat ?? macros.fat ?? 0) * 9)
+                    }
+                    items={[
+                      ...(macros.carbs != null ? [{ label: 'Karbohidrate', value: macros.carbs, goal: goals.carbs ?? macros.carbs, color: '#F59E0B' }] : []),
+                      ...(macros.protein != null ? [{ label: 'Proteina', value: macros.protein, goal: goals.protein ?? macros.protein, color: '#FB5A5C' }] : []),
+                      ...(macros.fat != null ? [{ label: 'Yndyra', value: macros.fat, goal: goals.fat ?? macros.fat, color: '#0EA5E9' }] : []),
+                    ]}
+                  />
                 </div>
               </div>
             )}

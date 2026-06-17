@@ -5,13 +5,14 @@ import { shortDate } from '../utils/format'
 import {
   DashboardShell,
   DashboardHeader,
-  StatCard,
   Panel,
   QuickAction,
   EmptyState,
   Badge,
   RingChart,
   StreakBadge,
+  ActionCard,
+  MetricTile,
 } from '../components/DashboardKit'
 
 interface Goal {
@@ -72,11 +73,17 @@ export default function ClientDashboard() {
         right={att.streak > 0 ? <StreakBadge days={att.streak} label="ditë" /> : undefined}
       />
 
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+        <ActionCard variant="coral" emoji="💪" title="Stërvitja sot" subtitle={`${counts.workouts} plane aktive`} cta="Hap planin" to="/workouts" />
+        <ActionCard variant="purple" emoji="🍽️" title="Dieta ime" subtitle={`${counts.diets} plane ushqimi`} cta="Shiko dietën" to="/diet" />
+        <ActionCard variant="teal" emoji="🎯" title="Qëllimet" subtitle={`${activeGoals.length} aktive`} cta="Ndiq progresin" to="/goals" />
+      </div>
+
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-        <StatCard icon="💪" accent="purple" label="Plane ushtrimesh" value={loading ? '…' : counts.workouts} />
-        <StatCard icon="🍽️" accent="orange" label="Plane diete" value={loading ? '…' : counts.diets} />
-        <StatCard icon="🎯" accent="blue" label="Qëllime aktive" value={loading ? '…' : activeGoals.length} />
-        <StatCard icon="✅" accent="green" label="Anëtarësimi" value="Aktiv" sub="Status" />
+        <MetricTile icon="🔥" label="Streak aktual" value={loading ? '…' : `${att.streak} ditë`} done={att.streak > 0} />
+        <MetricTile icon="📅" label="Vizita këtë javë" value={loading ? '…' : att.week} />
+        <MetricTile icon="🗓️" label="Vizita këtë muaj" value={loading ? '…' : att.month} />
+        <MetricTile icon="✅" label="Anëtarësimi" value="Aktiv" sub="Status" done />
       </div>
 
       <Panel title="Rregullsia ime">

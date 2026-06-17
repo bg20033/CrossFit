@@ -372,3 +372,143 @@ export function MacroRing({
     </div>
   )
 }
+
+/** Big metric tile with optional "done" check chip (e.g. "Days completed 12 ✓"). */
+export function MetricTile({
+  icon,
+  label,
+  value,
+  sub,
+  done = false,
+}: {
+  icon?: ReactNode
+  label: string
+  value: ReactNode
+  sub?: string
+  done?: boolean
+}) {
+  return (
+    <div className="rounded-2xl border border-gray-200 bg-white p-5">
+      <div className="flex items-start justify-between">
+        <p className="flex items-center gap-1.5 text-sm font-medium text-gray-500">
+          {icon && <span className="text-base">{icon}</span>}
+          {label}
+        </p>
+        {done && (
+          <span className="flex h-6 w-6 items-center justify-center rounded-full bg-coral-500 text-xs text-white">✓</span>
+        )}
+      </div>
+      <p className="mt-2 text-3xl font-bold text-gray-900">{value}</p>
+      {sub && <p className="mt-1 text-xs font-medium text-gray-400">{sub}</p>}
+    </div>
+  )
+}
+
+const actionVariants: Record<string, string> = {
+  coral: 'from-coral-500 to-coral-600',
+  purple: 'from-violet-500 to-violet-600',
+  teal: 'from-teal-500 to-teal-600',
+  dark: 'from-gray-800 to-gray-900',
+}
+
+/** Colorful gradient action card (e.g. "Stërvitja sot →" with a CTA pill). */
+export function ActionCard({
+  to,
+  onClick,
+  title,
+  subtitle,
+  emoji,
+  cta,
+  variant = 'coral',
+}: {
+  to?: string
+  onClick?: () => void
+  title: string
+  subtitle?: string
+  emoji?: ReactNode
+  cta?: string
+  variant?: 'coral' | 'purple' | 'teal' | 'dark'
+}) {
+  const inner = (
+    <div className={`relative flex h-full flex-col justify-between overflow-hidden rounded-2xl bg-gradient-to-br ${actionVariants[variant]} p-5 text-white transition hover:brightness-105`}>
+      <div className="absolute -right-6 -top-6 h-24 w-24 rounded-full bg-white/10" />
+      <div className="relative">
+        <div className="flex items-start justify-between">
+          {emoji && <span className="text-2xl">{emoji}</span>}
+          <span className="text-lg opacity-80">↗</span>
+        </div>
+        <p className="mt-3 text-base font-bold leading-tight">{title}</p>
+        {subtitle && <p className="mt-0.5 text-sm text-white/80">{subtitle}</p>}
+      </div>
+      {cta && (
+        <span className="relative mt-4 inline-flex w-fit items-center gap-1 rounded-full bg-white/20 px-3 py-1.5 text-xs font-semibold backdrop-blur">
+          {cta} →
+        </span>
+      )}
+    </div>
+  )
+  if (to) return <Link to={to} className="block h-full">{inner}</Link>
+  return <button onClick={onClick} className="block h-full w-full text-left">{inner}</button>
+}
+
+/** Calorie ring + macro rows (Carbs / Proteins / Fats) — nutrition overview. */
+export function MacroSummary({
+  calories,
+  caloriesGoal,
+  items,
+}: {
+  calories: number
+  caloriesGoal: number
+  items: { label: string; value: number; goal: number; unit?: string; color: string }[]
+}) {
+  const pct = caloriesGoal > 0 ? Math.min(100, Math.round((calories / caloriesGoal) * 100)) : 0
+  return (
+    <div className="flex flex-col items-center gap-6 sm:flex-row sm:gap-8">
+      <RingChart value={pct} label={`${calories} kcal`} sub={`nga ${caloriesGoal} kcal`} />
+      <div className="w-full flex-1 space-y-4">
+        {items.map((m) => {
+          const p = m.goal > 0 ? Math.min(100, (m.value / m.goal) * 100) : 0
+          return (
+            <div key={m.label}>
+              <div className="mb-1 flex justify-between text-sm">
+                <span className="font-medium text-gray-700">{m.label}</span>
+                <span className="text-gray-500">{m.value}/{m.goal}{m.unit ?? 'g'}</span>
+              </div>
+              <div className="h-2 w-full overflow-hidden rounded-full bg-gray-100">
+                <div className="h-full rounded-full" style={{ width: `${p}%`, backgroundColor: m.color }} />
+              </div>
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
+/** Vertical bar chart with day/category labels and values above bars. */
+export function WeeklyBars({
+  data,
+  height = 160,
+  unit = '',
+}: {
+  data: { label: string; value: number }[]
+  height?: number
+  unit?: string
+}) {
+  const max = Math.max(1, ...data.map((d) => d.value))
+  return (
+    <div className="flex items-end justify-between gap-2" style={{ height }}>
+      {data.map((d) => (
+        <div key={d.label} className="flex flex-1 flex-col items-center justify-end gap-1.5">
+          <span className="text-[11px] font-semibold text-gray-600">{d.value > 0 ? `${d.value}${unit}` : ''}</span>
+          <div
+            className="w-full max-w-[28px] rounded-t-lg bg-coral-500 transition-all"
+            style={{ height: `${Math.max(4, (d.value / max) * (height - 36))}px` }}
+            title={`${d.label}: ${d.value}${unit}`}
+          />
+          <span className="text-[11px] font-medium text-gray-400">{d.label}</span>
+        </div>
+      ))}
+    </div>
+  )
+}
