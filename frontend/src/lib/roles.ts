@@ -16,6 +16,10 @@ export const ROLE_LABELS: Record<UserRole, string> = {
   staff: 'Stafi',
 }
 
+export function roleLabel(role: UserRole): string {
+  return ROLE_LABELS[role] ?? role
+}
+
 export function hasRole(userRole: UserRole | undefined, allowed: UserRole[]): boolean {
   if (!userRole) return false
   return allowed.includes(userRole)

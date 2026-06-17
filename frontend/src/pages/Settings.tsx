@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { Button } from '../components/ui/button'
 import { useAuth } from '../contexts/AuthContext'
 import { useNotification } from '../contexts/NotificationContext'
-import { roleLabel } from '../utils/roles'
+import { roleLabel } from '../lib/roles'
 import api from '../utils/api'
 import { DashboardShell, DashboardHeader, Panel, Field, fieldCls, primaryBtn } from '../components/DashboardKit'
 
@@ -27,6 +27,15 @@ export default function Settings() {
       addNotification('Gabim', err.response?.data?.message || 'Përditësimi dështoi.', 'error')
     } finally {
       setSavingProfile(false)
+    }
+  }
+
+  const logoutEverywhere = async () => {
+    try {
+      await api.post('/auth/logout-all')
+      addNotification('Sukses', 'Të gjitha sesionet u anuluan.', 'success')
+    } catch {
+      addNotification('Gabim', 'Veprimi dështoi.', 'error')
     }
   }
 
@@ -85,6 +94,15 @@ export default function Settings() {
               {savingPw ? 'Duke ruajtur…' : 'Ndrysho fjalëkalimin'}
             </Button>
           </form>
+        </Panel>
+
+        <Panel title="Siguria">
+          <p className="mb-4 text-sm text-gray-500">
+            Dil nga të gjitha pajisjet — anulon të gjitha sesionet aktive (refresh tokens) përveç kësaj.
+          </p>
+          <Button onClick={logoutEverywhere} variant="outline">
+            Dil nga të gjitha pajisjet
+          </Button>
         </Panel>
       </div>
     </DashboardShell>

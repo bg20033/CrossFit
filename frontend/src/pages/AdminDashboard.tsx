@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import { useAuth } from '../contexts/AuthContext'
 import api from '../utils/api'
 import { eur, shortDate } from '../utils/format'
@@ -6,6 +6,7 @@ import {
   DashboardShell,
   DashboardHeader,
   StatCard,
+  StatCardsSkeleton,
   Panel,
   QuickAction,
   EmptyState,
@@ -18,89 +19,79 @@ const WD_AL: Record<string, string> = {
   Monday: 'E Hënë', Tuesday: 'E Martë', Wednesday: 'E Mërkurë', Thursday: 'E Enjte',
   Friday: 'E Premte', Saturday: 'E Shtunë', Sunday: 'E Diel',
 }
+const MONTHS = ['Jan', 'Shk', 'Mar', 'Pri', 'Maj', 'Qer', 'Korr', 'Gush', 'Sht', 'Tet', 'Nën', 'Dhj']
 
-interface Summary {
-  totalIncome: number
-  totalExpenses: number
-  balance: number
-}
-interface Tx {
-  id: number
-  type: string
-  amount: number
-  description?: string
-  transactionDate?: string
-  category?: string
-}
-interface PendingInvoice {
-  id: number
-  invoiceNumber: string
-  client: string
-  totalAmount: number
-  daysOverdue: number
-}
+interface Tx { id: number; type: string; amount: number; description?: string; transactionDate?: string; category?: string }
+interface PendingInvoice { id: number; invoiceNumber: string; client: string; totalAmount: number; daysOverdue: number }
+
+const val = (r: PromiseSettledResult<any>) => (r.status === 'fulfilled' ? r.value.data : null)
 
 export default function AdminDashboard() {
   const { user } = useAuth()
-  const [loading, setLoading] = useState(true)
-  const [summary, setSummary] = useState<Summary>({ totalIncome: 0, totalExpenses: 0, balance: 0 })
-  const [counts, setCounts] = useState({ clients: 0, staff: 0, trainers: 0, groups: 0 })
-  const [transactions, setTransactions] = useState<Tx[]>([])
-  const [pending, setPending] = useState<PendingInvoice[]>([])
-  const [monthly, setMonthly] = useState<{ label: string; income: number; expense: number }[]>([])
-  const [weekday, setWeekday] = useState<Record<string, number>>({})
 
-  useEffect(() => {
-    api.get('/attendance/overview').then((r) => setWeekday(r.data?.byWeekday ?? {})).catch(() => {})
-  }, [])
+  const summaryQ = useQuery({
+    queryKey: ['finance', 'summary'],
+    queryFn: async () => (await api.get('/finance/summary')).data as { totalIncome: number; totalExpenses: number; balance: number },
+  })
 
-  useEffect(() => {
-    const MONTHS = ['Jan', 'Shk', 'Mar', 'Pri', 'Maj', 'Qer', 'Korr', 'Gush', 'Sht', 'Tet', 'Nën', 'Dhj']
-    const now = new Date()
-    const months = Array.from({ length: 6 }, (_, k) => {
-      const d = new Date(now.getFullYear(), now.getMonth() - (5 - k), 1)
-      return { year: d.getFullYear(), month: d.getMonth() + 1 }
-    })
-    Promise.allSettled(months.map((m) => api.get(`/finance/monthly-report?year=${m.year}&month=${m.month}`))).then((res) => {
-      setMonthly(
-        res.map((r, i) => {
-          const d = r.status === 'fulfilled' ? (r as PromiseFulfilledResult<any>).value.data : null
-          return { label: MONTHS[months[i].month - 1], income: d?.income?.total ?? 0, expense: d?.expenses?.total ?? 0 }
-        })
-      )
-    })
-  }, [])
-
-  useEffect(() => {
-    let active = true
-    const load = async () => {
-      const results = await Promise.allSettled([
-        api.get('/finance/summary'),
+  const countsQ = useQuery({
+    queryKey: ['dashboard', 'counts'],
+    queryFn: async () => {
+      const r = await Promise.allSettled([
         api.get('/clients?page=1&pageSize=1'),
         api.get('/staff?page=1&pageSize=1'),
         api.get('/trainers?page=1&pageSize=1'),
         api.get('/traininggroups'),
-        api.get('/finance/transactions?page=1&pageSize=6'),
-        api.get('/invoice/pending'),
       ])
-      if (!active) return
-      const val = (i: number) => (results[i].status === 'fulfilled' ? (results[i] as PromiseFulfilledResult<any>).value.data : null)
-      if (val(0)) setSummary(val(0))
-      setCounts({
-        clients: val(1)?.total ?? 0,
-        staff: val(2)?.total ?? 0,
-        trainers: val(3)?.total ?? 0,
-        groups: Array.isArray(val(4)) ? val(4).length : 0,
+      return {
+        clients: val(r[0])?.total ?? 0,
+        staff: val(r[1])?.total ?? 0,
+        trainers: val(r[2])?.total ?? 0,
+        groups: Array.isArray(val(r[3])) ? val(r[3]).length : 0,
+      }
+    },
+  })
+
+  const txQ = useQuery({
+    queryKey: ['finance', 'transactions', 6],
+    queryFn: async () => ((await api.get('/finance/transactions?page=1&pageSize=6')).data.transactions ?? []) as Tx[],
+  })
+
+  const pendingQ = useQuery({
+    queryKey: ['invoice', 'pending'],
+    queryFn: async () => {
+      const d = (await api.get('/invoice/pending')).data
+      return (Array.isArray(d) ? d : []) as PendingInvoice[]
+    },
+  })
+
+  const weekdayQ = useQuery({
+    queryKey: ['attendance', 'overview', 'byWeekday'],
+    queryFn: async () => ((await api.get('/attendance/overview')).data?.byWeekday ?? {}) as Record<string, number>,
+  })
+
+  const monthlyQ = useQuery({
+    queryKey: ['finance', 'monthly6'],
+    queryFn: async () => {
+      const now = new Date()
+      const months = Array.from({ length: 6 }, (_, k) => {
+        const d = new Date(now.getFullYear(), now.getMonth() - (5 - k), 1)
+        return { year: d.getFullYear(), month: d.getMonth() + 1 }
       })
-      setTransactions(val(5)?.transactions ?? [])
-      setPending(Array.isArray(val(6)) ? val(6) : [])
-      setLoading(false)
-    }
-    load()
-    return () => {
-      active = false
-    }
-  }, [])
+      const res = await Promise.allSettled(months.map((m) => api.get(`/finance/monthly-report?year=${m.year}&month=${m.month}`)))
+      return res.map((r, i) => {
+        const d = val(r)
+        return { label: MONTHS[months[i].month - 1], income: d?.income?.total ?? 0, expense: d?.expenses?.total ?? 0 }
+      })
+    },
+  })
+
+  const summary = summaryQ.data ?? { totalIncome: 0, totalExpenses: 0, balance: 0 }
+  const counts = countsQ.data ?? { clients: 0, staff: 0, trainers: 0, groups: 0 }
+  const transactions = txQ.data ?? []
+  const pending = pendingQ.data ?? []
+  const weekday = weekdayQ.data ?? {}
+  const monthly = monthlyQ.data ?? []
 
   return (
     <DashboardShell>
@@ -110,28 +101,27 @@ export default function AdminDashboard() {
         subtitle="Pamje e përgjithshme e palestrës, financave dhe operacioneve."
       />
 
-      {/* Finance row */}
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-        <StatCard icon="↗" accent="green" label="Të hyrat (30 ditë)" value={loading ? '…' : eur(summary.totalIncome)} />
-        <StatCard icon="↘" accent="red" label="Shpenzimet (30 ditë)" value={loading ? '…' : eur(summary.totalExpenses)} />
-        <StatCard
-          icon="∑"
-          accent={summary.balance >= 0 ? 'blue' : 'red'}
-          label="Bilanci"
-          value={loading ? '…' : eur(summary.balance)}
-          sub={summary.balance >= 0 ? 'Pozitiv' : 'Negativ'}
-        />
-      </div>
+      {summaryQ.isLoading ? (
+        <StatCardsSkeleton count={3} />
+      ) : (
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+          <StatCard icon="↗" label="Të hyrat (30 ditë)" value={eur(summary.totalIncome)} />
+          <StatCard icon="↘" label="Shpenzimet (30 ditë)" value={eur(summary.totalExpenses)} />
+          <StatCard icon="∑" label="Bilanci" value={eur(summary.balance)} sub={summary.balance >= 0 ? 'Pozitiv' : 'Negativ'} />
+        </div>
+      )}
 
-      {/* Counts row */}
-      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-        <StatCard icon="👥" accent="blue" label="Klientë" value={loading ? '…' : counts.clients} />
-        <StatCard icon="🏋️" accent="purple" label="Trajnerë" value={loading ? '…' : counts.trainers} />
-        <StatCard icon="👔" accent="teal" label="Staf" value={loading ? '…' : counts.staff} />
-        <StatCard icon="📅" accent="orange" label="Grupe aktive" value={loading ? '…' : counts.groups} />
-      </div>
+      {countsQ.isLoading ? (
+        <StatCardsSkeleton count={4} />
+      ) : (
+        <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+          <StatCard icon="👥" label="Klientë" value={counts.clients} />
+          <StatCard icon="🏋️" label="Trajnerë" value={counts.trainers} />
+          <StatCard icon="👔" label="Staf" value={counts.staff} />
+          <StatCard icon="📅" label="Grupe aktive" value={counts.groups} />
+        </div>
+      )}
 
-      {/* Finance chart */}
       <Panel
         title="Hyrje vs Dalje (6 muajt e fundit)"
         action={
@@ -161,7 +151,6 @@ export default function AdminDashboard() {
         })()}
       </Panel>
 
-      {/* Secondary charts */}
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         <Panel title="Zënia sipas ditës (këtë muaj)">
           {Object.values(weekday).some((v) => v > 0) ? (
@@ -182,18 +171,16 @@ export default function AdminDashboard() {
         </Panel>
       </div>
 
-      {/* Quick actions */}
       <Panel title="Aksione të shpejta">
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <QuickAction to="/admin/finance" icon="💰" label="Financat" accent="green" />
-          <QuickAction to="/admin/clients" icon="👥" label="Klientët" accent="blue" />
-          <QuickAction to="/admin/staff" icon="👔" label="Stafi" accent="teal" />
-          <QuickAction to="/admin/cash-register" icon="🏧" label="Arka" accent="orange" />
+          <QuickAction to="/admin/finance" icon="💰" label="Financat" />
+          <QuickAction to="/admin/clients" icon="👥" label="Klientët" />
+          <QuickAction to="/admin/staff" icon="👔" label="Stafi" />
+          <QuickAction to="/admin/cash-register" icon="🏧" label="Arka" />
         </div>
       </Panel>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-        {/* Recent transactions */}
         <Panel title="Transaksionet e fundit" className="lg:col-span-2">
           {transactions.length === 0 ? (
             <EmptyState icon="🧾" text="Ende s'ka transaksione. Shtoji te Financat." />
@@ -223,7 +210,6 @@ export default function AdminDashboard() {
           )}
         </Panel>
 
-        {/* Pending invoices */}
         <Panel title="Fatura të papaguara">
           {pending.length === 0 ? (
             <EmptyState icon="✅" text="S'ka fatura të papaguara." />
@@ -237,7 +223,7 @@ export default function AdminDashboard() {
                   </div>
                   <div className="text-right">
                     <p className="text-sm font-semibold text-gray-800">{eur(inv.totalAmount)}</p>
-                    {inv.daysOverdue > 0 && <Badge accent="red">{inv.daysOverdue}d vonë</Badge>}
+                    {inv.daysOverdue > 0 && <Badge accent="gray">{inv.daysOverdue}d vonë</Badge>}
                   </div>
                 </div>
               ))}

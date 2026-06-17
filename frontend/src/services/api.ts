@@ -1,69 +1,50 @@
-import axios from 'axios'
-import type { AxiosInstance, AxiosError, InternalAxiosRequestConfig, AxiosResponse } from 'axios'
+import sharedClient from '../utils/api'
 import type { User, RegisterData, UserRole } from '../types'
 import { normalizeRole } from '../lib/roles'
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api'
+interface AuthPayload {
+  user: User
+  token: string
+  refreshToken: string
+}
 
+// Typed API surface. Reuses the single shared axios instance (utils/api) so
+// auth headers + 401-refresh rotation are applied consistently everywhere.
 class ApiService {
-  private client: AxiosInstance
+  private client = sharedClient
 
-  constructor() {
-    this.client = axios.create({
-      baseURL: API_URL,
-      headers: { 'Content-Type': 'application/json' },
-      timeout: 15000,
-    })
-
-    this.client.interceptors.request.use(
-      (config: InternalAxiosRequestConfig) => {
-        const token = localStorage.getItem('authToken')
-        if (token && config.headers) {
-          config.headers.Authorization = `Bearer ${token}`
-        }
-        return config
-      },
-      (error) => Promise.reject(error)
-    )
-
-    this.client.interceptors.response.use(
-      (response: AxiosResponse) => response,
-      (error: AxiosError) => {
-        if (error.response?.status === 401) {
-          this.handleUnauthorized()
-        }
-        return Promise.reject(error)
-      }
-    )
+  async login(email: string, password: string): Promise<AuthPayload> {
+    const { data } = await this.client.post('/auth/login', { email, password })
+    return data
   }
 
-  private handleUnauthorized() {
-    localStorage.removeItem('authToken')
-    if (window.location.pathname !== '/login' && window.location.pathname !== '/register') {
-      window.location.href = '/login'
-    }
+  async register(data: RegisterData): Promise<AuthPayload> {
+    const res = await this.client.post('/auth/register', data)
+    return res.data
   }
 
-  async login(email: string, password: string): Promise<{ user: User; token: string }> {
-    const response = await this.client.post('/auth/login', { email, password })
-    return response.data
+  async refresh(refreshToken: string): Promise<AuthPayload> {
+    const { data } = await this.client.post('/auth/refresh', { refreshToken })
+    return data
   }
 
-  async register(data: RegisterData): Promise<{ user: User; token: string }> {
-    const response = await this.client.post('/auth/register', data)
-    return response.data
+  logout(refreshToken: string | null) {
+    if (!refreshToken) return Promise.resolve()
+    return this.client.post('/auth/logout', { refreshToken }).catch(() => {})
+  }
+
+  logoutAll() {
+    return this.client.post('/auth/logout-all')
   }
 
   async getMe(): Promise<User> {
-    const response = await this.client.get('/auth/me')
-    return normalizeRole(response.data.role || response.data)
-      ? { ...response.data, role: normalizeRole(response.data.role) as UserRole }
-      : response.data
+    const { data } = await this.client.get('/auth/me')
+    return { ...data, role: normalizeRole(data.role) as UserRole }
   }
 
   async updateProfile(data: { name?: string; email?: string }): Promise<User> {
-    const response = await this.client.put('/auth/profile', data)
-    return response.data
+    const res = await this.client.put('/auth/profile', data)
+    return res.data
   }
 
   changePassword(currentPassword: string, newPassword: string) {
@@ -76,74 +57,6 @@ class ApiService {
 
   getTrainerMe() {
     return this.client.get('/trainers/me')
-  }
-
-  getClients(params?: { page?: number; pageSize?: number; search?: string }) {
-    return this.client.get('/clients', { params })
-  }
-
-  getClient(id: number) {
-    return this.client.get(`/clients/${id}`)
-  }
-
-  getAttendance(params?: { startDate?: string; endDate?: string; clientId?: number }) {
-    return this.client.get('/attendance', { params })
-  }
-
-  getAttendanceStats(params?: { clientId?: number; groupId?: number; period?: string }) {
-    return this.client.get('/attendance/stats', { params })
-  }
-
-  checkIn(data: { clientId: number; groupId?: number }) {
-    return this.client.post('/attendance/checkin', data)
-  }
-
-  checkOut(data: { clientId: number }) {
-    return this.client.post('/attendance/checkout', data)
-  }
-
-  getWorkoutPlans(params?: { clientId?: number; page?: number; pageSize?: number }) {
-    return this.client.get('/workoutplans', { params })
-  }
-
-  getDietPlans(params?: { clientId?: number; trainerId?: number }) {
-    return this.client.get('/dietplans', { params })
-  }
-
-  getGoals(params?: { clientId?: number }) {
-    return this.client.get('/goals', { params })
-  }
-
-  getTrainingGroups(params?: { trainerId?: number }) {
-    return this.client.get('/traininggroups', { params })
-  }
-
-  getTrainers() {
-    return this.client.get('/trainers')
-  }
-
-  getProgressLogs(params?: { clientId?: number }) {
-    return this.client.get('/progresslogs', { params })
-  }
-
-  getFinance(params?: { startDate?: string; endDate?: string; type?: string }) {
-    return this.client.get('/finance', { params })
-  }
-
-  getInvoices(params?: { clientId?: number; status?: string }) {
-    return this.client.get('/invoices', { params })
-  }
-
-  getCashRegister() {
-    return this.client.get('/cashregister')
-  }
-
-  getRentalInquiries() {
-    return this.client.get('/rentalinquiries')
-  }
-
-  getMembershipPlans() {
-    return this.client.get('/membershipplans')
   }
 }
 

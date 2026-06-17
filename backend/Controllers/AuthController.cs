@@ -54,14 +54,7 @@ public class AuthController : ControllerBase
         _context.Users.Add(user);
         await _context.SaveChangesAsync();
 
-        var token = GenerateJwtToken(user);
-
-        return Ok(new
-        {
-            message = "Registration successful",
-            user = new { id = user.Id, email = user.Email, name = user.Name, role = user.Role.ToString() },
-            token
-        });
+        return Ok(await BuildAuthResponseAsync(user, "Registration successful"));
     }
 
     [EnableRateLimiting("auth")]
@@ -75,14 +68,67 @@ public class AuthController : ControllerBase
             return Unauthorized(new { message = "Invalid email or password" });
         }
 
-        var token = GenerateJwtToken(user);
+        return Ok(await BuildAuthResponseAsync(user, "Login successful"));
+    }
 
-        return Ok(new
+    [EnableRateLimiting("auth")]
+    [HttpPost("refresh")]
+    public async Task<IActionResult> Refresh([FromBody] RefreshRequest request)
+    {
+        var stored = await _context.RefreshTokens
+            .Include(r => r.User)
+            .FirstOrDefaultAsync(r => r.Token == request.RefreshToken);
+
+        if (stored == null || !stored.IsActive)
+            return Unauthorized(new { message = "Invalid or expired refresh token" });
+
+        stored.RevokedAt = DateTime.UtcNow; // rotate: one-time use
+        var response = await BuildAuthResponseAsync(stored.User, "Token refreshed");
+        return Ok(response);
+    }
+
+    [Authorize]
+    [HttpPost("logout")]
+    public async Task<IActionResult> Logout([FromBody] RefreshRequest request)
+    {
+        var stored = await _context.RefreshTokens.FirstOrDefaultAsync(r => r.Token == request.RefreshToken);
+        if (stored != null && stored.RevokedAt == null)
         {
-            message = "Login successful",
+            stored.RevokedAt = DateTime.UtcNow;
+            await _context.SaveChangesAsync();
+        }
+        return Ok(new { message = "Logged out" });
+    }
+
+    [Authorize]
+    [HttpPost("logout-all")]
+    public async Task<IActionResult> LogoutAll()
+    {
+        var userIdClaim = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier);
+        if (!int.TryParse(userIdClaim?.Value, out var userId))
+            return Unauthorized();
+
+        var tokens = await _context.RefreshTokens.Where(r => r.UserId == userId && r.RevokedAt == null).ToListAsync();
+        foreach (var t in tokens) t.RevokedAt = DateTime.UtcNow;
+        await _context.SaveChangesAsync();
+        return Ok(new { message = "All sessions revoked", count = tokens.Count });
+    }
+
+    private async Task<object> BuildAuthResponseAsync(User user, string message)
+    {
+        var accessToken = GenerateJwtToken(user);
+        var raw = Convert.ToBase64String(System.Security.Cryptography.RandomNumberGenerator.GetBytes(32));
+        var days = int.TryParse(_configuration["JwtSettings:RefreshTokenDays"], out var d) ? d : 7;
+        _context.RefreshTokens.Add(new RefreshToken { UserId = user.Id, Token = raw, ExpiresAt = DateTime.UtcNow.AddDays(days) });
+        await _context.SaveChangesAsync();
+
+        return new
+        {
+            message,
             user = new { id = user.Id, email = user.Email, name = user.Name, role = user.Role.ToString() },
-            token
-        });
+            token = accessToken,
+            refreshToken = raw
+        };
     }
 
     [Authorize]
@@ -208,4 +254,10 @@ public class ChangePasswordRequest
     public string CurrentPassword { get; set; } = null!;
     [Required, MinLength(6), MaxLength(128)]
     public string NewPassword { get; set; } = null!;
+}
+
+public class RefreshRequest
+{
+    [Required, MaxLength(256)]
+    public string RefreshToken { get; set; } = null!;
 }

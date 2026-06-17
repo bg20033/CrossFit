@@ -32,10 +32,18 @@ public class FitnessContext : DbContext
     public DbSet<ProgressLog> ProgressLogs { get; set; } = null!;
     public DbSet<RentalInquiry> RentalInquiries { get; set; } = null!;
     public DbSet<AuditLog> AuditLogs { get; set; } = null!;
+    public DbSet<RefreshToken> RefreshTokens { get; set; } = null!;
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
+
+        modelBuilder.Entity<RefreshToken>(e =>
+        {
+            e.HasIndex(r => r.Token).IsUnique();
+            e.HasOne(r => r.User).WithMany().HasForeignKey(r => r.UserId).OnDelete(DeleteBehavior.Cascade);
+            e.Property(r => r.Token).HasMaxLength(256);
+        });
 
         modelBuilder.Entity<ProgressLog>()
             .HasOne(p => p.Client)

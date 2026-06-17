@@ -61,20 +61,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const login = async (email: string, password: string) => {
-    const { user, token } = await api.login(email, password)
+    const { user, token, refreshToken } = await api.login(email, password)
     localStorage.setItem('authToken', token)
+    localStorage.setItem('refreshToken', refreshToken)
     await applyUser(user)
   }
 
   const logout = () => {
+    api.logout(localStorage.getItem('refreshToken')) // revoke server-side (fire-and-forget)
     localStorage.removeItem('authToken')
+    localStorage.removeItem('refreshToken')
     storeLogout()
     setSidebarOpen(false)
   }
 
   const register = async (data: { email: string; password: string; name: string; role: UserRole }) => {
-    const { user, token } = await api.register(data)
+    const { user, token, refreshToken } = await api.register(data)
     localStorage.setItem('authToken', token)
+    localStorage.setItem('refreshToken', refreshToken)
     await applyUser(user)
   }
 

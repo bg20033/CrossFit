@@ -1,6 +1,6 @@
 import { NavLink, Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../../contexts/AuthContext'
-import { roleLabel } from '../../utils/roles'
+import { roleLabel } from '../../lib/roles'
 import { navForRole } from './navItems'
 
 function initials(name?: string): string {

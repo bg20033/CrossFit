@@ -1,7 +1,7 @@
 import { useLocation } from 'react-router-dom'
 import { useAuth } from '../../contexts/AuthContext'
 import { useNotification } from '../../contexts/NotificationContext'
-import { roleLabel } from '../../utils/roles'
+import { roleLabel } from '../../lib/roles'
 import { titleForPath } from './navItems'
 
 function initials(name?: string): string {
