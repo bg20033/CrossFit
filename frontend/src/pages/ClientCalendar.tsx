@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useAuth } from '../contexts/AuthContext'
 import api from '../utils/api'
-import { DashboardShell, DashboardHeader, StatCard, Panel } from '../components/DashboardKit'
+import { DashboardShell, DashboardHeader, StatCard, Panel, DayStrip, StreakBadge } from '../components/DashboardKit'
 
 interface Day {
   date: string
@@ -54,9 +54,20 @@ export default function ClientCalendar() {
 
   const dateStr = (day: number) => `${cursor.year}-${String(cursor.month).padStart(2, '0')}-${String(day).padStart(2, '0')}`
 
+  const markedDays = new Set((data?.days ?? []).map((d) => d.date))
+
   return (
     <DashboardShell>
-      <DashboardHeader badge="Klient" title="Kalendari im" subtitle="Sa herë ke ardhur dhe sa rregullt je." />
+      <DashboardHeader
+        badge="Klient"
+        title="Kalendari im"
+        subtitle="Sa herë ke ardhur dhe sa rregullt je."
+        right={(data?.currentStreak ?? 0) > 0 ? <StreakBadge days={data!.currentStreak} label="ditë" /> : undefined}
+      />
+
+      <Panel title="Kjo javë">
+        <DayStrip year={cursor.year} month={cursor.month} marked={markedDays} today={todayStr} />
+      </Panel>
 
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
         <StatCard icon="📅" label="Këtë muaj" value={data?.totalThisMonth ?? 0} sub={`${data?.attendedDaysThisMonth ?? 0} ditë`} />
@@ -89,9 +100,9 @@ export default function ClientCalendar() {
                 onClick={() => att && setSelected(att)}
                 className={`flex aspect-square flex-col items-center justify-center rounded-xl border text-sm transition ${
                   att
-                    ? 'border-gray-900 bg-gray-900 text-white'
+                    ? 'border-coral-500 bg-coral-500 text-white'
                     : isToday
-                    ? 'border-gray-400 text-gray-900'
+                    ? 'border-coral-400 text-coral-600'
                     : 'border-gray-100 text-gray-500 hover:bg-gray-50'
                 }`}
               >
@@ -103,8 +114,8 @@ export default function ClientCalendar() {
         </div>
 
         <div className="mt-4 flex items-center gap-4 text-xs text-gray-500">
-          <span className="flex items-center gap-1.5"><span className="h-3 w-3 rounded bg-gray-900" /> Ardhur</span>
-          <span className="flex items-center gap-1.5"><span className="h-3 w-3 rounded border border-gray-400" /> Sot</span>
+          <span className="flex items-center gap-1.5"><span className="h-3 w-3 rounded bg-coral-500" /> Ardhur</span>
+          <span className="flex items-center gap-1.5"><span className="h-3 w-3 rounded border border-coral-400" /> Sot</span>
         </div>
 
         {selected && (

@@ -11,6 +11,7 @@ import {
   EmptyState,
   Badge,
   Modal,
+  MacroRing,
 } from '../components/DashboardKit'
 
 interface DietPlan {
@@ -50,9 +51,20 @@ export default function ClientDiet() {
   }
 
   let parsedContent = ''
+  let macros: { protein?: number; carbs?: number; fat?: number; calories?: number } | null = null
+  let goals: { protein?: number; carbs?: number; fat?: number; calories?: number } = {}
   if (selected) {
     try {
-      parsedContent = JSON.stringify(JSON.parse(selected.content || '{}'), null, 2)
+      const obj = JSON.parse(selected.content || '{}')
+      parsedContent = JSON.stringify(obj, null, 2)
+      // Opportunistic: read macros if the trainer stored them (flat, or under macros/targets).
+      const m = obj.macros ?? obj.targets ?? obj
+      const num = (v: any) => (typeof v === 'number' ? v : typeof v === 'string' && v.trim() !== '' && !isNaN(+v) ? +v : undefined)
+      const picked = { protein: num(m.protein), carbs: num(m.carbs), fat: num(m.fat), calories: num(m.calories) }
+      if (picked.protein != null || picked.carbs != null || picked.fat != null) {
+        macros = picked
+        goals = obj.goals ?? obj.macroGoals ?? {}
+      }
     } catch {
       parsedContent = selected.content || ''
     }
@@ -104,11 +116,30 @@ export default function ClientDiet() {
                 <p className="font-semibold text-gray-800">{selected.isActive ? 'Aktiv' : 'Pasiv'}</p>
               </div>
             </div>
+            {macros && (
+              <div>
+                <p className="mb-2 text-sm font-semibold text-gray-700">Makro ditore</p>
+                <div className="flex flex-wrap justify-around gap-3 rounded-xl bg-gray-50 p-4">
+                  {macros.protein != null && (
+                    <MacroRing label="Proteina" value={macros.protein} goal={goals.protein ?? macros.protein} color="#FB5A5C" />
+                  )}
+                  {macros.carbs != null && (
+                    <MacroRing label="Karbo" value={macros.carbs} goal={goals.carbs ?? macros.carbs} color="#F59E0B" />
+                  )}
+                  {macros.fat != null && (
+                    <MacroRing label="Yndyra" value={macros.fat} goal={goals.fat ?? macros.fat} color="#0EA5E9" />
+                  )}
+                  {macros.calories != null && (
+                    <MacroRing label="Kalori" value={macros.calories} goal={goals.calories ?? macros.calories} unit="" color="#10B981" />
+                  )}
+                </div>
+              </div>
+            )}
             <div>
               <p className="mb-1 text-sm font-semibold text-gray-700">Plani i ushqimit</p>
               <pre className="max-h-48 overflow-auto rounded-lg bg-gray-50 p-3 text-xs text-gray-700">{parsedContent}</pre>
             </div>
-            <Button onClick={() => downloadPDF(selected)} className="w-full bg-gray-900 text-white hover:bg-gray-800">
+            <Button onClick={() => downloadPDF(selected)} className="w-full bg-coral-500 text-white hover:bg-coral-600">
               📥 Shkarko PDF
             </Button>
           </div>

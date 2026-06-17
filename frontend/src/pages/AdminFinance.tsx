@@ -161,7 +161,7 @@ export default function AdminFinance() {
         title="Financat"
         subtitle="Të hyrat, shpenzimet dhe transaksionet e palestrës."
         right={
-          <Button onClick={() => setShowForm((v) => !v)} className="bg-gray-900 text-white hover:bg-gray-800">
+          <Button onClick={() => setShowForm((v) => !v)} className="bg-coral-500 text-white hover:bg-coral-600">
             {showForm ? 'Mbyll' : '+ Transaksion'}
           </Button>
         }
@@ -209,7 +209,7 @@ export default function AdminFinance() {
                       <span className="font-medium text-gray-700">{eur(c.amount)}</span>
                     </div>
                     <div className="h-2 w-full overflow-hidden rounded-full bg-gray-100">
-                      <div className="h-full rounded-full bg-gray-900" style={{ width: `${(c.amount / max) * 100}%` }} />
+                      <div className="h-full rounded-full bg-coral-500" style={{ width: `${(c.amount / max) * 100}%` }} />
                     </div>
                   </div>
                 ))}
@@ -281,7 +281,7 @@ export default function AdminFinance() {
                 </select>
               </Field>
             </div>
-            <Button type="submit" className="bg-gray-900 text-white hover:bg-gray-800">Shto transaksionin</Button>
+            <Button type="submit" className="bg-coral-500 text-white hover:bg-coral-600">Shto transaksionin</Button>
           </form>
 
           {showCat && (

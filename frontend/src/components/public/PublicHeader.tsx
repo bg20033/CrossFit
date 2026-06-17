@@ -17,7 +17,7 @@ export default function PublicHeader() {
     <header className="sticky top-0 z-30 border-b border-gray-100 bg-white/90 backdrop-blur">
       <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 md:px-6">
         <Link to="/" className="flex items-center gap-2 text-xl font-extrabold text-gray-900">
-          <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-gray-900 text-lg text-white">💪</span>
+          <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-coral-500 text-lg text-white">💪</span>
           StandUp <span className="text-gray-500">CrossFit</span>
         </Link>
 
@@ -28,7 +28,7 @@ export default function PublicHeader() {
               to={l.to}
               end={l.to === '/'}
               className={({ isActive }) =>
-                `text-sm font-medium transition ${isActive ? 'text-gray-900' : 'text-gray-500 hover:text-gray-900'}`
+                `text-sm font-medium transition ${isActive ? 'text-coral-600' : 'text-gray-500 hover:text-coral-600'}`
               }
             >
               {l.label}

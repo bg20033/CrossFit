@@ -92,7 +92,7 @@ export default function AdminCalendar() {
                   <span className="font-medium text-gray-700">{wd[k] ?? 0} vizita</span>
                 </div>
                 <div className="h-2.5 w-full overflow-hidden rounded-full bg-gray-100">
-                  <div className="h-full rounded-full bg-gray-900" style={{ width: `${((wd[k] ?? 0) / maxWd) * 100}%` }} />
+                  <div className="h-full rounded-full bg-coral-500" style={{ width: `${((wd[k] ?? 0) / maxWd) * 100}%` }} />
                 </div>
               </div>
             ))}

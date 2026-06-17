@@ -10,6 +10,18 @@ export default {
   theme: {
     extend: {
       colors: {
+        coral: {
+          50: "#FFF1F1",
+          100: "#FFE0DF",
+          200: "#FFC4C2",
+          300: "#FF9D99",
+          400: "#FF6F6B",
+          500: "#FB5A5C",
+          600: "#EE3C42",
+          700: "#C72A30",
+          800: "#A4242A",
+          900: "#882327",
+        },
         border: "hsl(var(--border))",
         input: "hsl(var(--input))",
         ring: "hsl(var(--ring))",

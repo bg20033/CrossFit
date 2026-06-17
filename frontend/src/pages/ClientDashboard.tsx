@@ -11,6 +11,7 @@ import {
   EmptyState,
   Badge,
   RingChart,
+  StreakBadge,
 } from '../components/DashboardKit'
 
 interface Goal {
@@ -68,6 +69,7 @@ export default function ClientDashboard() {
         badge="Klient"
         title={`Mirë se erdhe, ${user?.name?.split(' ')[0] || 'Klient'} 🙌`}
         subtitle="Ndiq planin tënd, dietën dhe qëllimet e tua të fitnesit."
+        right={att.streak > 0 ? <StreakBadge days={att.streak} label="ditë" /> : undefined}
       />
 
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">

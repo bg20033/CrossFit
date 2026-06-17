@@ -28,7 +28,7 @@ export default class ErrorBoundary extends Component<Props, State> {
           <p className="max-w-sm text-sm text-gray-500">Ndodhi një gabim i papritur. Provo të rifreskosh faqen.</p>
           <button
             onClick={() => window.location.reload()}
-            className="rounded-lg bg-gray-900 px-5 py-2.5 text-sm font-semibold text-white hover:bg-gray-800"
+            className="rounded-lg bg-coral-500 px-5 py-2.5 text-sm font-semibold text-white hover:bg-coral-600"
           >
             Rifresko
           </button>

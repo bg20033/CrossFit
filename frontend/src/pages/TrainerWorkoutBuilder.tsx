@@ -213,12 +213,12 @@ export default function TrainerWorkoutBuilder() {
                     key={day}
                     onClick={() => setSelectedDay(idx)}
                     className={`py-2 px-3 rounded-lg font-semibold transition ${selectedDay === idx
-                      ? 'bg-primary text-white'
+                      ? 'bg-coral-500 text-white'
                       : 'bg-gray-100 hover:bg-gray-200'
                       }`}>
                     {day.slice(0, 3)}
                     {workoutDays[idx].exercises.length > 0 && (
-                      <span className="ml-1 bg-gray-900 text-white text-xs px-2 py-1 rounded">
+                      <span className="ml-1 bg-coral-600 text-white text-xs px-2 py-1 rounded">
                         {workoutDays[idx].exercises.length}
                       </span>
                     )}

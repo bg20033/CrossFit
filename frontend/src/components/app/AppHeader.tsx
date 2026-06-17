@@ -41,7 +41,7 @@ export default function AppHeader({ onMenu }: { onMenu: () => void }) {
         <button className="relative flex h-10 w-10 items-center justify-center rounded-lg text-gray-600 hover:bg-gray-100" aria-label="Njoftime">
           <span className="text-lg">🔔</span>
           {notifications.length > 0 && (
-            <span className="absolute right-1.5 top-1.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-gray-900 px-1 text-[10px] font-bold text-white">
+            <span className="absolute right-1.5 top-1.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-coral-500 px-1 text-[10px] font-bold text-white">
               {notifications.length}
             </span>
           )}

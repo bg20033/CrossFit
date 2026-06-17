@@ -126,7 +126,7 @@ export default function AdminDashboard() {
         title="Hyrje vs Dalje (6 muajt e fundit)"
         action={
           <div className="flex items-center gap-4 text-xs text-gray-500">
-            <span className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-sm bg-gray-900" /> Hyrje</span>
+            <span className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-sm bg-coral-500" /> Hyrje</span>
             <span className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-sm bg-gray-300" /> Dalje</span>
           </div>
         }
@@ -140,7 +140,7 @@ export default function AdminDashboard() {
               {monthly.map((m) => (
                 <div key={m.label} className="flex flex-1 flex-col items-center justify-end gap-2">
                   <div className="flex h-full w-full items-end justify-center gap-1">
-                    <div className="w-1/2 rounded-t bg-gray-900" style={{ height: `${(m.income / max) * 100}%` }} title={`Hyrje: ${eur(m.income)}`} />
+                    <div className="w-1/2 rounded-t bg-coral-500" style={{ height: `${(m.income / max) * 100}%` }} title={`Hyrje: ${eur(m.income)}`} />
                     <div className="w-1/2 rounded-t bg-gray-300" style={{ height: `${(m.expense / max) * 100}%` }} title={`Dalje: ${eur(m.expense)}`} />
                   </div>
                   <span className="text-xs text-gray-400">{m.label}</span>

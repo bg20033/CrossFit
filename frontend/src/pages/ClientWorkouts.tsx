@@ -114,7 +114,7 @@ export default function ClientWorkouts() {
                 <p className="font-semibold text-gray-800">{selected.isActive ? 'Aktiv' : 'Pasiv'}</p>
               </div>
             </div>
-            <Button onClick={() => downloadPDF(selected)} className="w-full bg-gray-900 text-white hover:bg-gray-800">
+            <Button onClick={() => downloadPDF(selected)} className="w-full bg-coral-500 text-white hover:bg-coral-600">
               📥 Shkarko PDF
             </Button>
           </div>

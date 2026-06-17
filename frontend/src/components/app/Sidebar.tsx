@@ -31,7 +31,7 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
         onClick={onNavigate}
         className="flex items-center gap-2 px-6 py-5 text-lg font-bold text-gray-900"
       >
-        <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-gray-900 text-xl text-white">💪</span>
+        <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-coral-500 text-xl text-white">💪</span>
         StandUp
       </Link>
 
@@ -46,8 +46,8 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
             className={({ isActive }) =>
               `flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition ${
                 isActive
-                  ? 'bg-gray-900 text-white'
-                  : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
+                  ? 'bg-coral-500 text-white'
+                  : 'text-gray-600 hover:bg-coral-50 hover:text-coral-700'
               }`
             }
           >

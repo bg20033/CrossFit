@@ -132,7 +132,7 @@ export default function ClientGoals() {
                   </div>
                   {inProgress && (
                     <div className="mt-3 flex gap-2">
-                      <Button onClick={() => act(g.id, 'complete')} size="sm" className="bg-gray-900 text-white hover:bg-gray-800">
+                      <Button onClick={() => act(g.id, 'complete')} size="sm" className="bg-coral-500 text-white hover:bg-coral-600">
                         ✅ Përfundo
                       </Button>
                       <Button onClick={() => act(g.id, 'abandon')} size="sm" variant="outline">

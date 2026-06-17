@@ -42,13 +42,21 @@ function WeightChart({ logs }: { logs: Log[] }) {
   const x = (i: number) => pad + (i * (w - 2 * pad)) / (pts.length - 1)
   const y = (val: number) => pad + (h - 2 * pad) * (1 - (val - min) / range)
   const path = pts.map((p, i) => `${i === 0 ? 'M' : 'L'} ${x(i)} ${y(Number(p.weight))}`).join(' ')
+  const area = `${path} L ${x(pts.length - 1)} ${h - pad} L ${x(0)} ${h - pad} Z`
 
   return (
     <svg viewBox={`0 0 ${w} ${h}`} className="w-full">
-      <path d={path} fill="none" stroke="#111827" strokeWidth="2.5" strokeLinejoin="round" strokeLinecap="round" />
+      <defs>
+        <linearGradient id="weightFill" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor="#FB5A5C" stopOpacity="0.18" />
+          <stop offset="100%" stopColor="#FB5A5C" stopOpacity="0" />
+        </linearGradient>
+      </defs>
+      <path d={area} fill="url(#weightFill)" stroke="none" />
+      <path d={path} fill="none" stroke="#FB5A5C" strokeWidth="2.5" strokeLinejoin="round" strokeLinecap="round" />
       {pts.map((p, i) => (
         <g key={p.id}>
-          <circle cx={x(i)} cy={y(Number(p.weight))} r="3.5" fill="#111827" />
+          <circle cx={x(i)} cy={y(Number(p.weight))} r="3.5" fill="#FB5A5C" />
           <text x={x(i)} y={y(Number(p.weight)) - 8} textAnchor="middle" className="fill-gray-500" fontSize="10">
             {Number(p.weight)}
           </text>

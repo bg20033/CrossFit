@@ -24,11 +24,11 @@ export default function Landing() {
         <div className="absolute -right-20 -top-20 h-72 w-72 rounded-full bg-white/5 blur-3xl" />
         <div className="absolute -bottom-24 -left-16 h-80 w-80 rounded-full bg-white/5 blur-3xl" />
         <div className="relative mx-auto max-w-7xl px-4 py-24 md:px-6 md:py-32">
-          <span className="inline-block rounded-full bg-white/10 px-4 py-1.5 text-sm font-semibold text-gray-200">
+          <span className="inline-block rounded-full bg-coral-500/15 px-4 py-1.5 text-sm font-semibold text-coral-300">
             Sistemi i menaxhimit të palestrës
           </span>
           <h1 className="mt-5 max-w-3xl text-4xl font-extrabold leading-tight md:text-6xl">
-            Drejto palestrën tënde, <span className="text-gray-400">pa stres.</span>
+            Drejto palestrën tënde, <span className="text-coral-400">pa stres.</span>
           </h1>
           <p className="mt-5 max-w-xl text-lg text-gray-300">
             Klientë, trajnerë, orare, financa dhe progres — të gjitha në një platformë moderne
@@ -36,7 +36,7 @@ export default function Landing() {
           </p>
           <div className="mt-8 flex flex-wrap gap-4">
             <Link to="/register">
-              <Button size="lg" className="bg-white text-gray-900 hover:bg-gray-200">Fillo Tani</Button>
+              <Button size="lg" className="bg-coral-500 text-white hover:bg-coral-600">Fillo Tani</Button>
             </Link>
             <Link to="/about">
               <Button size="lg" variant="outline" className="border-white/30 bg-transparent text-white hover:bg-white/10">
@@ -69,7 +69,7 @@ export default function Landing() {
                 key={f.title}
                 className="rounded-2xl border border-gray-100 bg-white p-6 shadow-sm transition hover:-translate-y-1 hover:shadow-md"
               >
-                <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-gray-100 text-2xl">{f.icon}</div>
+                <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-coral-50 text-2xl">{f.icon}</div>
                 <h3 className="mt-4 text-lg font-semibold text-gray-900">{f.title}</h3>
                 <p className="mt-2 text-sm text-gray-600">{f.text}</p>
               </div>
@@ -85,7 +85,7 @@ export default function Landing() {
           <p className="mt-3 text-gray-400">Regjistrohu sot dhe nis menaxhimin në mënyrë profesionale.</p>
           <div className="mt-8">
             <Link to="/register">
-              <Button size="lg" className="bg-white text-gray-900 hover:bg-gray-200">Krijo Llogari Falas</Button>
+              <Button size="lg" className="bg-coral-500 text-white hover:bg-coral-600">Krijo Llogari Falas</Button>
             </Link>
           </div>
         </div>

@@ -149,7 +149,7 @@ export default function AdminInvoices() {
                       {inv.daysOverdue > 0 ? <Badge accent="gray">{inv.daysOverdue} ditë</Badge> : <span className="text-gray-400">—</span>}
                     </td>
                     <td className="px-3 py-3 text-right">
-                      <Button size="sm" className="bg-gray-900 text-white hover:bg-gray-800" onClick={() => markPaid(inv.id)}>
+                      <Button size="sm" className="bg-coral-500 text-white hover:bg-coral-600" onClick={() => markPaid(inv.id)}>
                         Shëno si paguar
                       </Button>
                     </td>

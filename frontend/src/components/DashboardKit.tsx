@@ -35,7 +35,7 @@ export function DashboardHeader({
     <div className="flex flex-col gap-4 rounded-2xl border border-gray-200 bg-white px-6 py-6 md:flex-row md:items-center md:justify-between md:px-8">
       <div>
         {badge && (
-          <span className="mb-2 inline-block rounded-full bg-gray-100 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-gray-600">
+          <span className="mb-2 inline-block rounded-full bg-coral-50 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-coral-700">
             {badge}
           </span>
         )}
@@ -68,7 +68,7 @@ export function StatCard({
           <p className="mt-2 text-3xl font-bold text-gray-900">{value}</p>
           {sub && <p className="mt-1 text-xs font-medium text-gray-400">{sub}</p>}
         </div>
-        <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-gray-100 text-2xl text-gray-700">
+        <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-coral-50 text-2xl text-coral-600">
           {icon}
         </div>
       </div>
@@ -115,7 +115,7 @@ export function QuickAction({
       to={to}
       className="group flex items-center gap-3 rounded-xl border border-gray-200 bg-white p-4 transition hover:-translate-y-0.5 hover:border-gray-300"
     >
-      <span className="flex h-11 w-11 items-center justify-center rounded-lg bg-gray-900 text-xl text-white">
+      <span className="flex h-11 w-11 items-center justify-center rounded-lg bg-coral-500 text-xl text-white">
         {icon}
       </span>
       <span className="font-semibold text-gray-800 group-hover:text-gray-900">{label}</span>
@@ -186,13 +186,13 @@ export function RingChart({
   return (
     <div className="flex flex-col items-center">
       <svg width={size} height={size} className="-rotate-90">
-        <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="#f3f4f6" strokeWidth={stroke} />
+        <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="#FFE0DF" strokeWidth={stroke} />
         <circle
           cx={size / 2}
           cy={size / 2}
           r={r}
           fill="none"
-          stroke="#111827"
+          stroke="#FB5A5C"
           strokeWidth={stroke}
           strokeDasharray={c}
           strokeDashoffset={offset}
@@ -220,7 +220,7 @@ export function BarList({ items }: { items: { label: string; value: number; hint
             <span className="font-medium text-gray-700">{it.hint ?? it.value}</span>
           </div>
           <div className="h-2.5 w-full overflow-hidden rounded-full bg-gray-100">
-            <div className="h-full rounded-full bg-gray-900" style={{ width: `${(it.value / max) * 100}%` }} />
+            <div className="h-full rounded-full bg-coral-500" style={{ width: `${(it.value / max) * 100}%` }} />
           </div>
         </div>
       ))}
@@ -266,5 +266,109 @@ export function DashboardShell({ children }: { children: ReactNode }) {
   return <div className="mx-auto max-w-7xl space-y-6">{children}</div>
 }
 
-/** Neutral primary button styling (dark) for use with the shadcn Button via className. */
-export const primaryBtn = 'bg-gray-900 text-white hover:bg-gray-800'
+/** Primary (coral) button styling for use with the shadcn Button via className. */
+export const primaryBtn = 'bg-coral-500 text-white hover:bg-coral-600'
+
+/** Fire-streak pill (e.g. "🔥 12 ditë"). */
+export function StreakBadge({ days, label = 'streak' }: { days: number; label?: string }) {
+  return (
+    <span className="inline-flex items-center gap-1 rounded-full bg-coral-50 px-2.5 py-1 text-xs font-bold text-coral-700">
+      🔥 {days} {label}
+    </span>
+  )
+}
+
+/** Horizontal week strip with circular day badges; marked days filled coral. */
+export function DayStrip({
+  year,
+  month,
+  marked,
+  today,
+}: {
+  year: number
+  month: number
+  marked: Set<string>
+  today?: string
+}) {
+  // Show the week containing `today` (or the 1st) — 7 circular day badges Mon–Sun.
+  const base = today ? new Date(today) : new Date(year, month - 1, 1)
+  const dow = (base.getDay() + 6) % 7 // Monday-based
+  const monday = new Date(base)
+  monday.setDate(base.getDate() - dow)
+  const labels = ['Hën', 'Mar', 'Mër', 'Enj', 'Pre', 'Sht', 'Die']
+  const days = Array.from({ length: 7 }, (_, i) => {
+    const d = new Date(monday)
+    d.setDate(monday.getDate() + i)
+    return d
+  })
+  const iso = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+  return (
+    <div className="flex justify-between gap-1">
+      {days.map((d, i) => {
+        const s = iso(d)
+        const isMarked = marked.has(s)
+        const isToday = s === today
+        return (
+          <div key={s} className="flex flex-1 flex-col items-center gap-1.5">
+            <span className="text-[11px] font-medium text-gray-400">{labels[i]}</span>
+            <span
+              className={`flex h-9 w-9 items-center justify-center rounded-full text-sm font-semibold ${
+                isMarked
+                  ? 'bg-coral-500 text-white'
+                  : isToday
+                  ? 'border-2 border-coral-500 text-coral-600'
+                  : 'bg-gray-100 text-gray-500'
+              }`}
+            >
+              {d.getDate()}
+            </span>
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
+/** Small circular gauge for a single macro (protein/carbs/fat). */
+export function MacroRing({
+  label,
+  value,
+  goal,
+  unit = 'g',
+  color,
+}: {
+  label: string
+  value: number
+  goal: number
+  unit?: string
+  color: string
+}) {
+  const size = 84
+  const stroke = 8
+  const r = (size - stroke) / 2
+  const c = 2 * Math.PI * r
+  const pct = goal > 0 ? Math.min(1, value / goal) : 0
+  return (
+    <div className="flex flex-col items-center">
+      <svg width={size} height={size} className="-rotate-90">
+        <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="#F1F1F4" strokeWidth={stroke} />
+        <circle
+          cx={size / 2}
+          cy={size / 2}
+          r={r}
+          fill="none"
+          stroke={color}
+          strokeWidth={stroke}
+          strokeDasharray={c}
+          strokeDashoffset={c - pct * c}
+          strokeLinecap="round"
+        />
+        <text x="50%" y="50%" dy="0.1em" textAnchor="middle" className="rotate-90 fill-gray-900" style={{ transformOrigin: 'center' }} fontSize="15" fontWeight={700}>
+          {value}
+        </text>
+      </svg>
+      <p className="mt-1 text-sm font-semibold text-gray-800">{label}</p>
+      <p className="text-xs text-gray-400">/ {goal}{unit}</p>
+    </div>
+  )
+}

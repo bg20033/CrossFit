@@ -63,7 +63,7 @@ export default function Auth({ initialMode = 'login' }: { initialMode?: Mode }) 
     <div className="flex w-full items-center justify-center bg-gray-50 px-4 py-16 min-h-[80vh]">
       <div className="w-full max-w-md">
         <div className="mb-6 flex flex-col items-center text-center">
-          <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-gray-900 text-2xl text-white">💪</span>
+          <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-coral-500 text-2xl text-white">💪</span>
           <h1 className="mt-3 text-2xl font-bold text-gray-900">
             {isLogin ? 'Mirë se u ktheve' : 'Krijo një llogari'}
           </h1>
@@ -165,7 +165,7 @@ export default function Auth({ initialMode = 'login' }: { initialMode?: Mode }) 
             <Button
               type="submit"
               disabled={loading}
-              className="w-full bg-gray-900 text-white hover:bg-gray-800"
+              className="w-full bg-coral-500 text-white hover:bg-coral-600"
             >
               {loading ? 'Duke procesuar…' : isLogin ? 'Kyçu' : 'Krijo Llogari'}
             </Button>
@@ -175,14 +175,14 @@ export default function Auth({ initialMode = 'login' }: { initialMode?: Mode }) 
             {isLogin ? (
               <>
                 S'ke llogari?{' '}
-                <button onClick={() => switchTo('register')} className="font-semibold text-gray-900 underline">
+                <button onClick={() => switchTo('register')} className="font-semibold text-coral-600 underline">
                   Regjistrohu
                 </button>
               </>
             ) : (
               <>
                 Ke llogari?{' '}
-                <button onClick={() => switchTo('login')} className="font-semibold text-gray-900 underline">
+                <button onClick={() => switchTo('login')} className="font-semibold text-coral-600 underline">
                   Kyçu
                 </button>
               </>
