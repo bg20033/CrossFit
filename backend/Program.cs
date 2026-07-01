@@ -40,6 +40,7 @@ if (args.Contains("--migrate"))
         migrateContext.Database.Migrate();
         Console.WriteLine("Seeding RBAC baseline (roles/permissions)...");
         await RbacSeeder.SeedAsync(migrateContext);
+        await RbacSeeder.SeedBootstrapAdminAsync(migrateContext, migrateConfig);
         Console.WriteLine("Migration complete.");
     }
     return;
@@ -289,13 +290,16 @@ if (app.Environment.IsDevelopment())
     var db = scope.ServiceProvider.GetRequiredService<FitnessContext>();
     db.Database.Migrate();
     await RbacSeeder.SeedAsync(db);
+    await RbacSeeder.SeedBootstrapAdminAsync(db, app.Configuration);
 }
 else
 {
     try
     {
         using var scope = app.Services.CreateScope();
-        await RbacSeeder.SeedAsync(scope.ServiceProvider.GetRequiredService<FitnessContext>());
+        var db = scope.ServiceProvider.GetRequiredService<FitnessContext>();
+        await RbacSeeder.SeedAsync(db);
+        await RbacSeeder.SeedBootstrapAdminAsync(db, app.Configuration);
     }
     catch (Exception ex)
     {

@@ -7,12 +7,41 @@ import { extractQrToken } from './qrPayload'
  * In-browser QR scanner: getUserMedia → canvas → jsQR decode loop.
  * Falls back to manual token entry when no camera / permission is denied.
  */
+
+// getUserMedia throws a DOMException whose `.name` tells us exactly what went
+// wrong — surface that instead of one generic message so the admin knows
+// whether to fix a browser permission, plug in a camera, or close another
+// app that's holding it.
+function cameraErrorMessage(err: unknown): string {
+  if (!(err instanceof DOMException)) {
+    return 'Kamera nuk u hap. Lejo qasjen ose përdor futjen manuale më poshtë.'
+  }
+  switch (err.name) {
+    case 'NotAllowedError':
+    case 'PermissionDeniedError':
+      return 'Qasja te kamera është e bllokuar për këtë faqe. Klikoni ikonën e kyçit/kamerës pranë adresës në shiritin e browser-it, lejoni kamerën, dhe rifreskoni faqen.'
+    case 'NotFoundError':
+    case 'DevicesNotFoundError':
+      return 'Nuk u gjet asnjë kamerë e lidhur me këtë kompjuter. Lidh një kamerë ose përdor futjen manuale më poshtë.'
+    case 'NotReadableError':
+    case 'TrackStartError':
+      return 'Kamera është e zënë nga një aplikacion tjetër (p.sh. Zoom, Meet). Mbylle atë dhe provo përsëri.'
+    case 'OverconstrainedError':
+    case 'ConstraintNotSatisfiedError':
+      return 'Kamera e kërkuar nuk u gjet. Provo përsëri — sistemi do të përdorë çdo kamerë të disponueshme.'
+    case 'SecurityError':
+      return 'Faqja nuk po hapet mbi lidhje të sigurt (HTTPS/localhost), kështu që browser-i bllokon kamerën.'
+    default:
+      return `Kamera nuk u hap (${err.name}). Lejo qasjen ose përdor futjen manuale më poshtë.`
+  }
+}
 export function Scanner({ onResult }: { onResult: (token: string) => void }) {
   const videoRef = useRef<HTMLVideoElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const rafRef = useRef<number>()
   const streamRef = useRef<MediaStream | null>(null)
   const lastRef = useRef<{ token: string; ts: number }>({ token: '', ts: 0 })
+  const startingRef = useRef(false)
 
   const [active, setActive] = useState(false)
   const [error, setError] = useState('')
@@ -53,24 +82,77 @@ export function Scanner({ onResult }: { onResult: (token: string) => void }) {
     rafRef.current = requestAnimationFrame(tick)
   }
 
-  const start = async () => {
-    setError('')
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: 'environment' },
-        audio: false,
-      })
-      streamRef.current = stream
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream
-        await videoRef.current.play()
-      }
-      setActive(true)
-      rafRef.current = requestAnimationFrame(tick)
-    } catch {
-      setError('Kamera nuk u hap. Lejo qasjen ose përdor futjen manuale më poshtë.')
-      setActive(false)
+  const openStream = async (constraints: MediaStreamConstraints) => {
+    const stream = await navigator.mediaDevices.getUserMedia(constraints)
+    streamRef.current = stream
+    if (videoRef.current) {
+      videoRef.current.srcObject = stream
+      await videoRef.current.play()
     }
+    setActive(true)
+    rafRef.current = requestAnimationFrame(tick)
+  }
+
+  const isBusyError = (err: unknown) =>
+    err instanceof DOMException && (err.name === 'NotReadableError' || err.name === 'TrackStartError')
+
+  const start = async () => {
+    // Ignore a second click while the first request is still in flight —
+    // firing getUserMedia twice concurrently is a real cause of a bogus
+    // "camera busy" error.
+    if (startingRef.current) return
+    startingRef.current = true
+    setError('')
+
+    // Defensively release any stream this component instance still holds
+    // before asking for a new one — requesting a second stream without
+    // stopping the first is another common cause of the same error.
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach((t) => t.stop())
+      streamRef.current = null
+    }
+
+    // Try the rear camera first, then fall back to whatever camera the
+    // browser can give us — some webcams/drivers reject the facingMode
+    // constraint outright even though a plain `video: true` works fine.
+    const attempts: MediaStreamConstraints[] = [
+      { video: { facingMode: 'environment' }, audio: false },
+      { video: true, audio: false },
+    ]
+
+    let lastErr: unknown = null
+    for (const constraints of attempts) {
+      try {
+        await openStream(constraints)
+        startingRef.current = false
+        return
+      } catch (err) {
+        lastErr = err
+
+        // A transient "device busy" report right after releasing a previous
+        // track is common on macOS Chrome — the OS can take a beat to hand
+        // the camera back. One short retry clears most of these.
+        if (isBusyError(err)) {
+          await new Promise((r) => setTimeout(r, 400))
+          try {
+            await openStream(constraints)
+            startingRef.current = false
+            return
+          } catch (retryErr) {
+            lastErr = retryErr
+          }
+        }
+
+        // Explicit denial won't be fixed by trying a different constraint set.
+        if (err instanceof DOMException && (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError')) {
+          break
+        }
+      }
+    }
+
+    setError(cameraErrorMessage(lastErr))
+    setActive(false)
+    startingRef.current = false
   }
 
   useEffect(() => () => stop(), [])

@@ -11,6 +11,8 @@ RUN dotnet publish "StandUpFitness.csproj" -c Release -o /app/publish
 FROM mcr.microsoft.com/dotnet/aspnet:8.0
 WORKDIR /app
 COPY --from=publish /app/publish .
-EXPOSE 5050
-ENV ASPNETCORE_URLS=http://+:5050
+EXPOSE 8080
+ENV ASPNETCORE_ENVIRONMENT=Production
+ENV ASPNETCORE_URLS=http://+:8080
+ENV ASPNETCORE_FORWARDEDHEADERS_ENABLED=true
 ENTRYPOINT ["dotnet", "StandUpFitness.dll"]

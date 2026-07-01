@@ -3,6 +3,7 @@ import { useState, useEffect } from 'react'
 import api from '../utils/api'
 import { DashboardShell, DashboardHeader, StatCard, Panel, EmptyState, Field, fieldCls, Badge, primaryBtn } from '../components/DashboardKit'
 import WeeklyScheduleGrid from '../components/WeeklyScheduleGrid'
+import GroupsRentalsWeeklyGrid from '../components/GroupsRentalsWeeklyGrid'
 
 interface Day {
   date: string
@@ -145,6 +146,8 @@ export default function AdminCalendar() {
         <StatCard icon={<CalendarDays className="h-5 w-5" />} label="Kjo javë" value={data?.totalVisitsWeek ?? 0} />
         <StatCard icon={<TrendingUp className="h-5 w-5" />} label="Dita më e ngarkuar" value={data?.busiestDay ? (WD_AL[data.busiestDay] ?? data.busiestDay) : '—'} />
       </div>
+
+      <GroupsRentalsWeeklyGrid />
 
       <WeeklyScheduleGrid />
 

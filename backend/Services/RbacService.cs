@@ -154,4 +154,61 @@ public static class RbacSeeder
             await context.SaveChangesAsync();
         }
     }
+
+    public static async Task SeedBootstrapAdminAsync(FitnessContext context, IConfiguration configuration)
+    {
+        var email = configuration["BootstrapAdmin:Email"]?.Trim().ToLowerInvariant();
+        var password = configuration["BootstrapAdmin:Password"];
+        var name = configuration["BootstrapAdmin:Name"]?.Trim();
+        var resetPassword = bool.TryParse(configuration["BootstrapAdmin:ResetPasswordOnDeploy"], out var reset) && reset;
+
+        if (string.IsNullOrWhiteSpace(email) || string.IsNullOrWhiteSpace(password))
+            return;
+
+        if (password.Length < 8)
+            throw new InvalidOperationException("BootstrapAdmin:Password must be at least 8 characters.");
+
+        var user = await context.Users.SingleOrDefaultAsync(u => u.Email == email);
+        if (user == null)
+        {
+            context.Users.Add(new User
+            {
+                Email = email,
+                Name = string.IsNullOrWhiteSpace(name) ? "StandUp CrossFit Admin" : name,
+                PasswordHash = BCrypt.Net.BCrypt.HashPassword(password),
+                Role = UserRole.Admin,
+                IsActive = true
+            });
+            await context.SaveChangesAsync();
+            return;
+        }
+
+        var changed = false;
+        if (user.Role != UserRole.Admin)
+        {
+            user.Role = UserRole.Admin;
+            changed = true;
+        }
+        if (!user.IsActive)
+        {
+            user.IsActive = true;
+            changed = true;
+        }
+        if (resetPassword)
+        {
+            user.PasswordHash = BCrypt.Net.BCrypt.HashPassword(password);
+            changed = true;
+        }
+        if (!string.IsNullOrWhiteSpace(name) && user.Name != name)
+        {
+            user.Name = name;
+            changed = true;
+        }
+
+        if (changed)
+        {
+            user.UpdatedAt = DateTime.UtcNow;
+            await context.SaveChangesAsync();
+        }
+    }
 }

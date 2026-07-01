@@ -52,7 +52,7 @@ const clock = (ts: number) =>
 function VerdictBanner({ v }: { v: LastVerdict | null }) {
   if (!v) {
     return (
-      <div className="flex h-full min-h-[120px] items-center justify-center rounded-2xl border border-dashed border-gray-200 text-sm text-gray-400">
+      <div className="flex min-h-[120px] items-center justify-center rounded-2xl border border-dashed border-gray-200 text-sm text-gray-400">
         Skano një QR për të parë vendimin
       </div>
     )
