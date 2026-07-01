@@ -27,7 +27,7 @@ export default function ClientDashboard() {
   const { user, profileId } = useAuth()
   const [loading, setLoading] = useState(true)
   const [goals, setGoals] = useState<Goal[]>([])
-  const [counts, setCounts] = useState({ workouts: 0, diets: 0 })
+  const [, setCounts] = useState({ workouts: 0, diets: 0 })
   const [att, setAtt] = useState({ rate: 0, week: 0, month: 0, streak: 0 })
 
   useEffect(() => {

@@ -32,7 +32,7 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
         onClick={onNavigate}
         className="flex items-center gap-2.5 px-6 py-5 font-display text-lg font-bold tracking-tight text-gray-900"
       >
-        <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-gray-900 font-mono text-sm font-bold text-white">SU</span>
+        <img src="/icons/logo.png" alt="Stand Up CrossFit" className="h-9 w-9 shrink-0 rounded-lg object-cover" />
         Stand Up<span className="text-coral-500">.</span>
       </Link>
 

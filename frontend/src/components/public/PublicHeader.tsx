@@ -17,7 +17,7 @@ export default function PublicHeader() {
     <header className="sticky top-0 z-30 border-b border-gray-100 bg-white">
       <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 md:px-6">
         <Link to="/" className="flex items-center gap-2.5 font-display text-xl font-bold tracking-tight text-gray-900">
-          <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-gray-900 font-mono text-sm font-bold text-white">SU</span>
+          <img src="/icons/logo.png" alt="Stand Up CrossFit" className="h-9 w-9 shrink-0 rounded-lg object-cover" />
           Stand Up <span className="text-gray-500">CrossFit</span>
         </Link>
 

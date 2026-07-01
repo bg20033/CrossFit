@@ -63,7 +63,7 @@ export default function Auth({ initialMode = 'login' }: { initialMode?: Mode }) 
     <div className="flex w-full items-center justify-center bg-canvas px-4 py-16 min-h-[80vh]">
       <div className="w-full max-w-md">
         <div className="mb-6 flex flex-col items-center text-center">
-          <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-gray-900 font-mono text-lg font-bold text-white">SU</span>
+          <img src="/icons/logo.png" alt="Stand Up CrossFit" className="h-16 w-16 rounded-xl object-cover" />
           <p className="label-mono mt-4">Stand Up CrossFit</p>
           <h1 className="mt-1 text-2xl font-bold tracking-tight text-gray-900">
             {isLogin ? 'Mirë se u ktheve' : 'Krijo një llogari'}
