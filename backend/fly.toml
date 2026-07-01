@@ -1,73 +1,16 @@
-# Fly.io app config for the StandUpFitness API (.NET 8).
-# Run `fly deploy` from inside backend/ (same folder as Dockerfile).
-#
-# Sensitive values are NOT set here — fly.toml is committed to git. Set them with
-# `fly secrets set` instead (see the deploy notes at the bottom of this file).
-
 app = "standupcrossfit"
 primary_region = "ams"
 
-[build]
-
-[env]
-  ASPNETCORE_ENVIRONMENT = "Production"
-  ASPNETCORE_URLS = "http://+:5050"
-  # Must match this app's public hostname (Program.cs refuses to boot with "*" in prod).
-  AllowedHosts = "standupcrossfit.fly.dev"
-  JwtSettings__ExpiryMinutes = "60"
-  JwtSettings__RefreshTokenDays = "7"
-  JwtSettings__Issuer = "StandUpFitness"
-  JwtSettings__Audience = "StandUpFitnessClient"
-  # TODO: replace with your real deployed frontend origin (must be https://, no wildcard —
-  # Program.cs validates both). Add more Cors__AllowedOrigins__1, __2, ... if you have several.
-  Cors__AllowedOrigins__0 = "https://REPLACE_WITH_YOUR_FRONTEND_DOMAIN"
-  Payments__PublicBaseUrl = "https://standupcrossfit.fly.dev"
-  Email__Provider = "log"
-  Sms__Provider = "log"
-
-# Runs once before new machines start (not on every instance boot — avoids several
-# machines racing to migrate the same DB at once). See the `--migrate` branch added
-# to the top of Program.cs.
-[deploy]
-  release_command = "dotnet StandUpFitness.dll --migrate"
-
 [http_service]
-  internal_port = 5050
-  force_https = true
-  auto_stop_machines = false
-  auto_start_machines = true
-  min_machines_running = 1
-  processes = ["app"]
-
-  [[http_service.checks]]
-    interval = "15s"
-    timeout = "2s"
-    grace_period = "10s"
-    method = "GET"
-    path = "/health"
+auto_start_machines = true
+auto_stop_machines = true
+force_https = true
+internal_port = 8_080
+min_machines_running = 0
+processes = [ "app" ]
 
 [[vm]]
-  memory = "512mb"
-  cpu_kind = "shared"
-  cpus = 1
-
-# ---------------------------------------------------------------------------
-# One-time setup (run from backend/, after `fly launch`/`fly apps create` if the
-# app doesn't exist yet — this dashboard shows it already does):
-#
-#   fly secrets set \
-#     "ConnectionStrings__DefaultConnection=Server=mysql-3cbd8c54-standupcrossfit-7797.b.aivencloud.com;Port=13353;Database=defaultdb;User=avnadmin;Password=YOUR_AIVEN_PASSWORD;SslMode=Required;" \
-#     "JwtSettings__SecretKey=$(openssl rand -base64 48)"
-#
-# Then set Cors__AllowedOrigins__0 above to your real frontend URL and deploy:
-#
-#   fly deploy
-#
-# Aiven requires SSL — SslMode=Required is what makes Pomelo/MySqlConnector negotiate
-# TLS against Aiven's managed MySQL. `defaultdb` is Aiven's default database name; no
-# need to create `standup_fitness` — the app doesn't care what the DB is called.
-#
-# Security note: the Aiven password shown in the dashboard was pasted into this chat.
-# Consider rotating it from the Aiven console (Users -> avnadmin -> Reset password)
-# once secrets are set here, so it isn't sitting in your chat history long-term.
-# ---------------------------------------------------------------------------
+cpu_kind = "shared"
+cpus = 1
+memory = "1gb"
+memory_mb = 256
