@@ -1,4 +1,4 @@
-import { Banknote, CalendarDays, ClipboardList, Dumbbell, Tag } from 'lucide-react'
+import { ClipboardList, Tag } from 'lucide-react'
 import { useState, useEffect, useMemo } from 'react'
 import { Button } from '../components/ui/button'
 import { useAuth } from '../contexts/AuthContext'
@@ -9,7 +9,6 @@ import {
   DashboardShell,
   DashboardHeader,
   Panel,
-  StatCard,
   Badge,
   RingChart,
   EmptyState,
@@ -288,33 +287,6 @@ export default function ClientPackageStatus() {
           </div>
         )}
       </Panel>
-
-      {/* Stats */}
-      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-        <StatCard
-          icon={<CalendarDays className="h-5 w-5" />}
-          label="Ditë të mbetura"
-          value={current ? remaining : '—'}
-          sub={current ? (remaining === 1 ? 'ditë' : 'ditë') : undefined}
-        />
-        <StatCard
-          icon={<Dumbbell className="h-5 w-5" />}
-          label="Seanca të mbetura"
-          value={current ? (current.sessionsTotal - current.sessionsUsed) : '—'}
-          sub={current ? 'seanca' : undefined}
-        />
-        <StatCard
-          icon={<Banknote className="h-5 w-5" />}
-          label="Vlera e paguar"
-          value={current ? eur(current.price) : '—'}
-        />
-        <StatCard
-          icon={<ClipboardList className="h-5 w-5" />}
-          label="Historiku"
-          value={history.length}
-          sub={history.length === 1 ? 'paketë' : 'paketa'}
-        />
-      </div>
 
       {/* Offers */}
       <Panel title="Oferta & Rinovime">

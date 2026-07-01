@@ -116,54 +116,44 @@ export default function MuscleBodyMap({
   }
 
   const selectedMeasurement = selected ? measurements[selected] : undefined
+  const renderBodyView = (view: 'front' | 'back', scale = 1.05) => (
+    <div className="relative flex w-full justify-center overflow-hidden rounded-xl border border-gray-100 bg-white p-3">
+      <p className="absolute left-3 top-2 text-[10px] font-bold uppercase tracking-wider text-gray-400">
+        {view === 'front' ? 'Përpara' : 'Prapa'}
+      </p>
+      <div className="max-w-full">
+        <Body
+          data={bodyData}
+          side={view}
+          gender={gender}
+          scale={scale}
+          onBodyPartPress={handlePress}
+          defaultFill="#ECE8E0"
+          defaultStroke="none"
+          border="none"
+          colors={['#FBE3DD', '#EE3A24']}
+        />
+      </div>
+    </div>
+  )
 
   return (
-    <div className="flex flex-col items-center gap-6 lg:flex-row lg:items-start">
+    <div className="flex w-full min-w-0 flex-col items-stretch gap-5 lg:flex-row lg:items-start">
       {/* Body views */}
-      <div className="flex flex-col items-center gap-4">
-        <div className="flex items-start gap-4">
-          {/* Front view */}
-          <div className="relative rounded-2xl border border-gray-100 bg-white p-3">
-            <p className="absolute left-3 top-2 text-[10px] font-bold uppercase tracking-wider text-gray-400">
-              Përpara
-            </p>
-            <Body
-              data={bodyData}
-              side="front"
-              gender={gender}
-              scale={1.2}
-              onBodyPartPress={handlePress}
-              defaultFill="#ECE8E0"
-              defaultStroke="none"
-              border="none"
-              colors={['#FBE3DD', '#EE3A24']}
-            />
-          </div>
+      <div className="flex w-full min-w-0 flex-col items-center gap-4 lg:flex-1">
+        <div className="w-full min-w-0 lg:hidden">
+          {renderBodyView(showBothSides ? side : 'front', 1.05)}
+        </div>
 
-          {/* Back view (optional) */}
-          {showBothSides && (
-            <div className="relative rounded-2xl border border-gray-100 bg-white p-3">
-              <p className="absolute left-3 top-2 text-[10px] font-bold uppercase tracking-wider text-gray-400">
-                Prapa
-              </p>
-              <Body
-                data={bodyData}
-                side="back"
-                gender={gender}
-                scale={1.2}
-                onBodyPartPress={handlePress}
-                defaultFill="#ECE8E0"
-                defaultStroke="none"
-                border="none"
-                colors={['#FBE3DD', '#EE3A24']}
-              />
-            </div>
-          )}
+        <div className="hidden w-full min-w-0 items-start justify-center gap-4 lg:flex">
+          <div className="w-full max-w-[17rem]">{renderBodyView('front', 1.2)}</div>
+          {showBothSides && <div className="w-full max-w-[17rem]">{renderBodyView('back', 1.2)}</div>}
         </div>
 
         {/* Side toggle (mobile-friendly) */}
-        <div className="flex gap-2 lg:hidden">
+        {showBothSides && <div className="flex gap-2 lg:hidden">
           <button
+            type="button"
             onClick={() => setSide('front')}
             className={`rounded-lg px-3 py-1.5 text-xs font-semibold ${
               side === 'front' ? 'bg-gray-900 text-white' : 'bg-gray-100 text-gray-600 '
@@ -172,6 +162,7 @@ export default function MuscleBodyMap({
             Përpara
           </button>
           <button
+            type="button"
             onClick={() => setSide('back')}
             className={`rounded-lg px-3 py-1.5 text-xs font-semibold ${
               side === 'back' ? 'bg-gray-900 text-white' : 'bg-gray-100 text-gray-600'
@@ -179,11 +170,11 @@ export default function MuscleBodyMap({
           >
             Prapa
           </button>
-        </div>
+        </div>}
       </div>
 
       {/* Detail panel */}
-      <div className="w-full max-w-xs flex-1">
+      <div className="w-full min-w-0 lg:max-w-xs lg:flex-1">
         {selected && selectedMeasurement ? (
           <div className="rounded-2xl border border-gray-200 bg-white p-5">
             <div className="mb-3 flex items-center justify-between">

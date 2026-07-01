@@ -6,7 +6,6 @@ import api from '../utils/api'
 import { QrCode } from '../features/access/QrCode'
 import {
   DashboardShell,
-  DashboardHeader,
   Panel,
   Badge,
   EmptyState,
@@ -88,11 +87,7 @@ export default function ClientQrCard() {
 
   return (
     <DashboardShell>
-      <DashboardHeader
-        badge="Kartela e Anëtarit"
-        title={`Kartela jote, ${user?.name?.split(' ')[0] ?? 'Klient'} 🪪`}
-        subtitle="Shfaq këtë QR tek Arka për të hyrë në palestër."
-      />
+      
 
       {/* Big QR Card — phone-optimized */}
       <div className={`mx-auto max-w-md transition ${showBack ? 'hidden' : 'block'}`}>
@@ -108,9 +103,6 @@ export default function ClientQrCard() {
           <div className="bg-gray-900 px-6 py-5 text-white">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
-                <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-gray-800 font-mono text-sm font-bold">
-                  SU
-                </span>
                 <div>
                   <p className="font-display text-lg font-bold leading-tight">Stand Up CrossFit</p>
                   <p className="text-xs text-white/50">Kartela e Anëtarit</p>
@@ -125,7 +117,6 @@ export default function ClientQrCard() {
             </div>
           </div>
 
-          {/* QR area */}
           <div className="flex flex-col items-center bg-gradient-to-b from-gray-50/80 to-white px-6 py-8">
             {loading ? (
               <Skeleton className="h-[240px] w-[240px] rounded-3xl" />
@@ -134,7 +125,6 @@ export default function ClientQrCard() {
                 <div className="rounded-3xl border-2 border-dashed border-gray-200 bg-white p-5 shadow-sm">
                   <QrCode value={token} size={228} />
                 </div>
-                <p className="label-mono mt-5 text-base font-semibold tracking-[0.2em] text-gray-700">{token}</p>
                 <button
                   onClick={copyToken}
                   className="mt-2 rounded-lg px-3 py-1.5 text-xs font-medium text-gray-400 transition hover:bg-gray-100 hover:text-gray-700"

@@ -258,6 +258,15 @@ app.Use(async (context, next) =>
 
     await next();
 });
+
+var webRoot = app.Environment.WebRootPath ?? Path.Combine(app.Environment.ContentRootPath, "wwwroot");
+var hasFrontendBuild = File.Exists(Path.Combine(webRoot, "index.html"));
+if (hasFrontendBuild)
+{
+    app.UseDefaultFiles();
+    app.UseStaticFiles();
+}
+
 app.UseCors("App");
 app.UseRateLimiter();
 app.Use(async (context, next) =>
@@ -282,6 +291,8 @@ app.UseAuthorization();
 
 app.MapControllers();
 app.MapHealthChecks("/health").AllowAnonymous();
+if (hasFrontendBuild)
+    app.MapFallbackToFile("index.html").AllowAnonymous();
 
 // Apply migrations automatically only in Development; production migrates via deploy pipeline.
 if (app.Environment.IsDevelopment())

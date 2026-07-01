@@ -1,13 +1,11 @@
-import { Trophy, Medal, Flame, Trash2 } from 'lucide-react'
-import { useEffect, useMemo, useState } from 'react'
-import { useAuth } from '../contexts/AuthContext'
+import { Trophy, Flame, Trash2 } from 'lucide-react'
+import { useEffect, useState } from 'react'
 import { useNotification } from '../contexts/NotificationContext'
 import {
   DashboardShell,
   DashboardHeader,
   Panel,
   StatCard,
-  EmptyState,
   Field,
   fieldCls,
   primaryBtn,
@@ -18,14 +16,12 @@ import {
   useLeaderboard,
   formatScore,
   parseScore,
-  buildBoard,
 } from '../features/leaderboard/leaderboardStore'
 import { shortDate } from '../utils/format'
 
 export default function ClientLeaderboard() {
-  const { user } = useAuth()
   const { addNotification } = useNotification()
-  const { prs, community, addPr, removePr, prsFor, bestFor, hydrate } = useLeaderboard()
+  const { prs, addPr, removePr, prsFor, bestFor, hydrate } = useLeaderboard()
 
   useEffect(() => {
     hydrate()
@@ -41,11 +37,6 @@ export default function ClientLeaderboard() {
 
   const myBest = bestFor(selected)
   const history = prsFor(selected)
-  const board = useMemo(
-    () => buildBoard(selected, community, myBest?.value ?? null, user?.name?.split(' ')[0] || 'Ti'),
-    [selected, community, myBest, user]
-  )
-  const myRank = board.findIndex((r) => r.isMe)
 
   const totalPrs = prs.length
   const trackedBenchmarks = new Set(prs.map((p) => p.benchmark)).size
@@ -92,15 +83,14 @@ export default function ClientLeaderboard() {
   return (
     <DashboardShell>
       <DashboardHeader
-        badge="Komuniteti"
+        badge="Rekordet e mia"
         title="Leaderboard & Rekordet"
-        subtitle="Ndiq rekordet personale (PR) dhe krahasohu me palestrën."
+        subtitle="Ndiq rekordet e tua personale (PR) — vetëm rezultatet e tua janë këtu."
       />
 
-      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-4 lg:grid-cols-3">
         <StatCard icon={<Trophy className="h-5 w-5" />} label="PR të regjistruara" value={totalPrs} />
         <StatCard icon={<Flame className="h-5 w-5" />} label="Benchmark të ndjekur" value={trackedBenchmarks} />
-        <StatCard icon={<Medal className="h-5 w-5" />} label={`Rendi te ${bm.name}`} value={myRank >= 0 ? `#${myRank + 1}` : '—'} />
         <StatCard icon={<Trophy className="h-5 w-5" />} label={`PB ${bm.name}`} value={myBest ? formatScore(bm.type, myBest.value) : '—'} />
       </div>
 
@@ -118,6 +108,12 @@ export default function ClientLeaderboard() {
         ))}
       </div>
 
+      <p className="text-xs text-gray-400">
+        {cat === 'WOD'
+          ? 'Fran, Grace, Helen etj. janë stërvitje standarde "benchmark" të CrossFit-it (jo të shpikura nga sistemi) — çdo palestër CrossFit i mat këto për të ndjekur progresin me kohë.'
+          : 'Ngritjet bazë (1RM — një përsëritje maksimale) që zakonisht maten në CrossFit: sa më e rëndë, aq më mirë.'}
+      </p>
+
       <div className="flex flex-wrap gap-2">
         {list.map((b) => (
           <button
@@ -132,8 +128,8 @@ export default function ClientLeaderboard() {
         ))}
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-5">
-        <Panel title={bm.name} className="lg:col-span-2">
+      <div className="grid gap-6">
+        <Panel title={bm.name}>
           <p className="text-sm text-gray-500">{bm.description}</p>
           <form onSubmit={submit} className="mt-4 space-y-3">
             <div className="grid grid-cols-2 gap-3">
@@ -167,31 +163,6 @@ export default function ClientLeaderboard() {
                   </div>
                 )
               })}
-            </div>
-          )}
-        </Panel>
-
-        <Panel title={`Tabela e palestrës — ${bm.name}`} className="lg:col-span-3">
-          {board.length === 0 ? (
-            <EmptyState icon={<Trophy className="h-5 w-5" />} text="S'ka ende rezultate për këtë benchmark." />
-          ) : (
-            <div className="space-y-1.5">
-              {board.map((row, i) => (
-                <div
-                  key={`${row.athlete}-${i}`}
-                  className={`flex items-center justify-between rounded-lg px-3 py-2.5 ${row.isMe ? 'border border-coral-300 bg-coral-50' : 'border border-gray-100'}`}
-                >
-                  <div className="flex items-center gap-3">
-                    <span className={`flex h-7 w-7 items-center justify-center rounded-full text-xs font-bold ${
-                      i === 0 ? 'bg-yellow-400 text-white' : i === 1 ? 'bg-gray-300 text-white' : i === 2 ? 'bg-amber-600 text-white' : 'bg-gray-100 text-gray-500'
-                    }`}>
-                      {i + 1}
-                    </span>
-                    <span className={`text-sm font-medium ${row.isMe ? 'text-coral-700' : 'text-gray-800'}`}>{row.athlete}</span>
-                  </div>
-                  <span className="nums text-sm font-semibold text-gray-900">{formatScore(bm.type, row.value)}</span>
-                </div>
-              ))}
             </div>
           )}
         </Panel>

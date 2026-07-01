@@ -60,9 +60,20 @@
   }
   html {
     -webkit-text-size-adjust: 100%;
+    touch-action: manipulation;
+    overflow-x: hidden;
   }
   body {
     @apply bg-background font-sans text-foreground antialiased;
+    overflow-x: hidden;
+    touch-action: manipulation;
+  }
+  input, select, textarea {
+    font-size: 16px !important;
+    touch-action: manipulation;
+  }
+  button {
+    touch-action: manipulation;
   }
   /* Headings & numerals use Space Grotesk with tight tracking. */
   h1, h2, h3, h4, h5, h6 {

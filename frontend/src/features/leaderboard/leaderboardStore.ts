@@ -70,12 +70,12 @@ export const useLeaderboard = create<LeaderboardState>()(
     (set, get) => ({
       prs: [],
       community: [],
+      // Leaderboard page is personal-only: fetch just this user's own PRs.
+      // (The gym-wide /leaderboard/board endpoint and buildBoard() below are
+      // left in place for future reuse, just not called from here anymore.)
       hydrate: async () => {
         try {
-          const [prsRes, ...boardRes] = await Promise.all([
-            api.get('/leaderboard/prs'),
-            ...BENCHMARKS.map((b) => api.get('/leaderboard/board', { params: { benchmark: b.key } })),
-          ])
+          const prsRes = await api.get('/leaderboard/prs')
           const server: PrEntry[] = Array.isArray(prsRes.data) ? prsRes.data.map((r: any) => ({
             id: `srv-${r.id}`,
             serverId: r.id,
@@ -84,17 +84,7 @@ export const useLeaderboard = create<LeaderboardState>()(
             date: String(r.date).slice(0, 10),
             note: r.note ?? undefined,
           })) : []
-          const community: CommunityScore[] = boardRes.flatMap((res, idx) => {
-            const benchmark = BENCHMARKS[idx].key
-            return Array.isArray(res.data)
-              ? res.data.map((row: any) => ({
-                  athlete: row.athlete,
-                  benchmark,
-                  value: Number(row.value),
-                }))
-              : []
-          })
-          set({ prs: server, community })
+          set({ prs: server, community: [] })
         } catch {
           set({ prs: [], community: [] })
         }

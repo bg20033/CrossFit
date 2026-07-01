@@ -100,7 +100,7 @@ public class MembershipsController : ControllerBase
         if (client == null) return NotFound();
         if (!await CanAccessClientAsync(client.Id)) return Forbid();
 
-        var plan = client.Plan ?? await _context.MembershipPlans.FirstOrDefaultAsync(p => p.Name == client.MembershipType);
+        var plan = await ResolvePlanAsync(client);
         var durationDays = plan?.DurationDays > 0 ? plan.DurationDays : 30;
         var baseDate = client.MembershipExpiry.HasValue && client.MembershipExpiry.Value > DateTime.UtcNow
             ? client.MembershipExpiry.Value
@@ -160,9 +160,28 @@ public class MembershipsController : ControllerBase
             .FirstOrDefaultAsync(c => c.UserId == userId.Value);
     }
 
+    // Resolves a client's plan for the purpose of reading its price/duration/session
+    // count, even if the plan was later soft-deleted from the Pakot admin page.
+    // MembershipPlan has a global HasQueryFilter(!IsDeleted), so a plain lookup (or
+    // the client.Plan navigation loaded via .Include) silently returns null the
+    // moment a plan is deleted — even for clients who are still actively on it. That
+    // makes their price show €0 and sessions-remaining go negative (0 - used), which
+    // is exactly the "package looks broken" symptom. IgnoreQueryFilters() here is
+    // scoped to this read-only lookup only; Offers() below still correctly hides
+    // deleted plans from being purchased/assigned again.
+    private async Task<MembershipPlan?> ResolvePlanAsync(Client client)
+    {
+        if (client.PlanId.HasValue)
+        {
+            var byId = await _context.MembershipPlans.IgnoreQueryFilters().FirstOrDefaultAsync(p => p.Id == client.PlanId.Value);
+            if (byId != null) return byId;
+        }
+        return await _context.MembershipPlans.IgnoreQueryFilters().FirstOrDefaultAsync(p => p.Name == client.MembershipType);
+    }
+
     private async Task<object> ShapeCurrentAsync(Client client)
     {
-        var plan = client.Plan ?? await _context.MembershipPlans.FirstOrDefaultAsync(p => p.Name == client.MembershipType);
+        var plan = await ResolvePlanAsync(client);
         var expiry = client.MembershipExpiry ?? client.StartDate.AddDays(plan?.DurationDays > 0 ? plan.DurationDays : 30);
         var sessionsUsed = await _context.AttendanceLogs.CountAsync(a => a.ClientId == client.Id && a.CheckInTime >= client.StartDate);
         var status = client.IsActive && expiry >= DateTime.UtcNow ? "active" : "expired";

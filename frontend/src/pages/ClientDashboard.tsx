@@ -1,4 +1,4 @@
-import { CalendarDays, CheckCircle, Dumbbell, Flame, QrCode, Target, Ticket, UtensilsCrossed } from 'lucide-react'
+import { CheckCircle,  Target } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { useAuth } from '../contexts/AuthContext'
 import api from '../utils/api'
@@ -7,12 +7,10 @@ import {
   DashboardShell,
   DashboardHeader,
   Panel,
-  QuickAction,
   EmptyState,
   Badge,
   RingChart,
   StreakBadge,
-  ActionCard,
   MetricTile,
 } from '../components/DashboardKit'
 
@@ -67,6 +65,7 @@ export default function ClientDashboard() {
 
   return (
     <DashboardShell>
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
       <DashboardHeader
         badge="Klient"
         title={`Mirë se erdhe, ${user?.name?.split(' ')[0] || 'Klient'}`}
@@ -74,18 +73,8 @@ export default function ClientDashboard() {
         right={att.streak > 0 ? <StreakBadge days={att.streak} label="ditë" /> : undefined}
       />
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-        <ActionCard variant="coral" emoji={<Dumbbell className="h-5 w-5" />} title="Stërvitja sot" subtitle={`${counts.workouts} plane aktive`} cta="Hap planin" to="/workouts" />
-        <ActionCard variant="purple" emoji={<UtensilsCrossed className="h-5 w-5" />} title="Dieta ime" subtitle={`${counts.diets} plane ushqimi`} cta="Shiko dietën" to="/diet" />
-        <ActionCard variant="dark" emoji={<Ticket className="h-5 w-5" />} title="Anëtarësimi" subtitle="Statusi & rinovimi" cta="Shiko detajet" to="/package" />
-        <ActionCard variant="teal" emoji={<Target className="h-5 w-5" />} title="Qëllimet" subtitle={`${activeGoals.length} aktive`} cta="Ndiq progresin" to="/goals" />
-      </div>
 
-      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-        <MetricTile icon={<Flame className="h-5 w-5" />} label="Streak aktual" value={loading ? '…' : `${att.streak} ditë`} done={att.streak > 0} />
-        <MetricTile icon={<CalendarDays className="h-5 w-5" />} label="Vizita këtë javë" value={loading ? '…' : att.week} />
-        <MetricTile icon={<CalendarDays className="h-5 w-5" />} label="Vizita këtë muaj" value={loading ? '…' : att.month} />
-        <MetricTile icon={<CheckCircle className="h-5 w-5" />} label="Anëtarësimi" value="Aktiv" sub="Status" done />
+      <MetricTile icon={<CheckCircle className="h-5 w-5" />} label="Anëtarësimi" value="Aktiv" sub="Status" done />
       </div>
 
       <Panel title="Rregullsia ime">
@@ -111,15 +100,6 @@ export default function ClientDashboard() {
         </p>
       </Panel>
 
-      <Panel title="Aksione të shpejta">
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3 lg:grid-cols-5">
-          <QuickAction to="/qr-card" icon={<QrCode className="h-5 w-5" />} label="Kartela QR" />
-          <QuickAction to="/workouts" icon={<Dumbbell className="h-5 w-5" />} label="Ushtrimet e mia" accent="purple" />
-          <QuickAction to="/diet" icon={<UtensilsCrossed className="h-5 w-5" />} label="Dieta ime" accent="orange" />
-          <QuickAction to="/package" icon={<Ticket className="h-5 w-5" />} label="Anëtarësimi" />
-          <QuickAction to="/goals" icon={<Target className="h-5 w-5" />} label="Qëllimet" accent="blue" />
-        </div>
-      </Panel>
 
       <Panel title="Qëllimet e mia" action={<Badge accent="blue">{activeGoals.length} aktive</Badge>}>
         {loading ? (

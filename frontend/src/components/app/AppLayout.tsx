@@ -20,7 +20,9 @@ export default function AppLayout() {
 
         <div className="md:pl-64">
           <AppHeader onMenu={() => setMenuOpen(true)} />
-          <main className={`px-4 py-6 md:px-8 md:py-8 ${mobileClientShell ? 'pb-28 md:pb-8' : ''}`}>
+          {/* pt-24 clears the now-fixed header (h-16) plus breathing room, since
+              the header no longer occupies space in normal document flow. */}
+          <main className={`px-4 pb-6 pt-24 md:px-8 md:pb-8 ${mobileClientShell ? 'pb-28 md:pb-8' : ''}`}>
             <Outlet />
           </main>
         </div>

@@ -1,4 +1,4 @@
-const CACHE = 'standup-crossfit-v1'
+const CACHE = 'standup-crossfit-v2'
 const APP_SHELL = ['/', '/manifest.webmanifest', '/icons/icon.svg']
 
 self.addEventListener('install', (event) => {
