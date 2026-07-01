@@ -65,7 +65,7 @@ export function StatCard({
       <div className="flex items-start justify-between">
         <div>
           <p className="text-sm font-medium text-gray-500">{label}</p>
-          <p className="mt-2 text-3xl font-bold text-gray-900">{value}</p>
+          <p className="nums mt-2 font-display text-3xl font-bold tracking-tight text-gray-900">{value}</p>
           {sub && <p className="mt-1 text-xs font-medium text-gray-400">{sub}</p>}
         </div>
         <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-coral-50 text-2xl text-coral-600">
@@ -153,7 +153,7 @@ export function Modal({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/40" onClick={onClose} />
-      <div className="relative z-10 max-h-[85vh] w-full max-w-lg overflow-y-auto rounded-2xl border border-gray-200 bg-white p-6 shadow-xl">
+      <div className="relative z-10 max-h-[85vh] w-full max-w-lg overflow-y-auto rounded-2xl border border-gray-200 bg-white p-6">
         <div className="mb-4 flex items-center justify-between">
           <h3 className="text-lg font-semibold text-gray-900">{title}</h3>
           <button onClick={onClose} className="flex h-8 w-8 items-center justify-center rounded-lg text-gray-500 hover:bg-gray-100">
@@ -186,19 +186,19 @@ export function RingChart({
   return (
     <div className="flex flex-col items-center">
       <svg width={size} height={size} className="-rotate-90">
-        <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="#FFE0DF" strokeWidth={stroke} />
+        <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="#FBE3DD" strokeWidth={stroke} />
         <circle
           cx={size / 2}
           cy={size / 2}
           r={r}
           fill="none"
-          stroke="#FB5A5C"
+          stroke="#EE3A24"
           strokeWidth={stroke}
           strokeDasharray={c}
           strokeDashoffset={offset}
           strokeLinecap="round"
         />
-        <text x="50%" y="50%" dy="0.1em" textAnchor="middle" className="rotate-90 fill-gray-900" style={{ transformOrigin: 'center' }} fontSize={size * 0.22} fontWeight={700}>
+        <text x="50%" y="50%" dy="0.1em" textAnchor="middle" className="rotate-90 fill-gray-900" style={{ transformOrigin: 'center', fontFamily: "'Space Grotesk', sans-serif" }} fontSize={size * 0.22} fontWeight={700}>
           {Math.round(pct)}%
         </text>
       </svg>
@@ -351,7 +351,7 @@ export function MacroRing({
   return (
     <div className="flex flex-col items-center">
       <svg width={size} height={size} className="-rotate-90">
-        <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="#F1F1F4" strokeWidth={stroke} />
+        <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="#ECE8E0" strokeWidth={stroke} />
         <circle
           cx={size / 2}
           cy={size / 2}
@@ -363,7 +363,7 @@ export function MacroRing({
           strokeDashoffset={c - pct * c}
           strokeLinecap="round"
         />
-        <text x="50%" y="50%" dy="0.1em" textAnchor="middle" className="rotate-90 fill-gray-900" style={{ transformOrigin: 'center' }} fontSize="15" fontWeight={700}>
+        <text x="50%" y="50%" dy="0.1em" textAnchor="middle" className="rotate-90 fill-gray-900" style={{ transformOrigin: 'center', fontFamily: "'Space Grotesk', sans-serif" }} fontSize="15" fontWeight={700}>
           {value}
         </text>
       </svg>
@@ -398,7 +398,7 @@ export function MetricTile({
           <span className="flex h-6 w-6 items-center justify-center rounded-full bg-coral-500 text-xs text-white">✓</span>
         )}
       </div>
-      <p className="mt-2 text-3xl font-bold text-gray-900">{value}</p>
+      <p className="nums mt-2 font-display text-3xl font-bold tracking-tight text-gray-900">{value}</p>
       {sub && <p className="mt-1 text-xs font-medium text-gray-400">{sub}</p>}
     </div>
   )
@@ -431,7 +431,6 @@ export function ActionCard({
 }) {
   const inner = (
     <div className={`relative flex h-full flex-col justify-between overflow-hidden rounded-2xl bg-gradient-to-br ${actionVariants[variant]} p-5 text-white transition hover:brightness-105`}>
-      <div className="absolute -right-6 -top-6 h-24 w-24 rounded-full bg-white/10" />
       <div className="relative">
         <div className="flex items-start justify-between">
           {emoji && <span className="text-2xl">{emoji}</span>}
@@ -441,7 +440,7 @@ export function ActionCard({
         {subtitle && <p className="mt-0.5 text-sm text-white/80">{subtitle}</p>}
       </div>
       {cta && (
-        <span className="relative mt-4 inline-flex w-fit items-center gap-1 rounded-full bg-white/20 px-3 py-1.5 text-xs font-semibold backdrop-blur">
+        <span className="relative mt-4 inline-flex w-fit items-center gap-1 rounded-full border border-gray-200 bg-transparent px-3 py-1.5 text-xs font-semibold">
           {cta} →
         </span>
       )}

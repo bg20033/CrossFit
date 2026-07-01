@@ -147,7 +147,7 @@ dotnet ef database update
    ```bash
    # Get all groups
    curl -H "Authorization: Bearer YOUR_TOKEN" \
-     http://localhost:5000/api/traininggroups
+     http://localhost:5050/api/traininggroups
 
    # Create workout plan
    curl -X POST \
@@ -160,7 +160,7 @@ dotnet ef database update
        "durationWeeks": 4,
        "content": "{\"week1\": [...]}"
      }' \
-     http://localhost:5000/api/workoutplans/create
+     http://localhost:5050/api/workoutplans/create
    ```
 
 ---
@@ -272,7 +272,7 @@ dotnet ef database update
 
 ## 📝 Notes
 
-- Trainer ID is hardcoded to `1` in frontend - update with actual ID from auth context
+- Trainer ID should come from the authenticated trainer profile.
 - PDF export returns JSON now - frontend will generate PDF with jsPDF
 - Workout/Diet content uses JSON format - can extend with rich editor later
 - Attendance can be bulk recorded - add "Mark All Present" button later

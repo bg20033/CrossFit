@@ -1,7 +1,9 @@
+import { Banknote, CheckCircle, Clock, Receipt } from 'lucide-react'
 import { useState, useEffect } from 'react'
 import { Button } from '../components/ui/button'
 import { useNotification } from '../contexts/NotificationContext'
 import api from '../utils/api'
+import { toDecimal } from '../utils/number'
 import { eur } from '../utils/format'
 import {
   DashboardShell,
@@ -28,6 +30,16 @@ interface Item {
   quantity: string
   unitPrice: string
 }
+interface ClientLite {
+  id: number
+  name: string
+}
+interface GroupLite {
+  id: number
+  name: string
+  membersCount: number
+  maxCapacity: number
+}
 
 const blankItem: Item = { description: '', quantity: '1', unitPrice: '0' }
 
@@ -37,12 +49,35 @@ export default function AdminInvoices() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [showCreate, setShowCreate] = useState(false)
-  const [form, setForm] = useState({ clientId: '', description: '', taxPercent: '0', paymentMethod: 'cash', dueDate: '' })
+  const [form, setForm] = useState({ clientId: '', description: '', taxPercent: '0', paymentMethod: 'cash', dueDate: '', groupId: '' })
   const [items, setItems] = useState<Item[]>([{ ...blankItem }])
+  const [clients, setClients] = useState<ClientLite[]>([])
+  const [groups, setGroups] = useState<GroupLite[]>([])
+  const [suggestLoading, setSuggestLoading] = useState(false)
 
   useEffect(() => {
     fetchPending()
   }, [])
+
+  useEffect(() => {
+    if (showCreate) {
+      api.get('/clients?pageSize=200').then((r) => setClients(r.data?.clients ?? [])).catch(() => setClients([]))
+      setGroups([])
+      setForm((f) => ({ ...f, groupId: '' }))
+    }
+  }, [showCreate])
+
+  useEffect(() => {
+    if (form.clientId && showCreate) {
+      setSuggestLoading(true)
+      api.get(`/traininggroups/suggest-for-client?clientId=${form.clientId}`)
+        .then((r) => setGroups(Array.isArray(r.data) ? r.data : []))
+        .catch(() => setGroups([]))
+        .finally(() => setSuggestLoading(false))
+    } else {
+      setGroups([])
+    }
+  }, [form.clientId, showCreate])
 
   const fetchPending = async () => {
     try {
@@ -58,8 +93,8 @@ export default function AdminInvoices() {
 
   const markPaid = async (id: number) => {
     try {
-      await api.post(`/invoice/${id}/mark-paid`, { paymentMethod: 'cash' })
-      addNotification('Sukses', 'Fatura u shënua si e paguar.', 'success')
+      const res = await api.post('/payments/checkout', { invoiceId: id, method: 'cash', idempotencyKey: `invoice-${id}-cash` })
+      addNotification('Sukses', `Pagesa u regjistrua. Kuponi: ${res.data.receiptNumber}`, 'success')
       fetchPending()
     } catch (err: any) {
       setError(err.response?.data?.message || 'Veprimi dështoi')
@@ -81,18 +116,20 @@ export default function AdminInvoices() {
       await api.post('/invoice/create', {
         clientId: parseInt(form.clientId),
         description: form.description,
-        taxPercent: parseFloat(form.taxPercent || '0'),
+        taxPercent: toDecimal(form.taxPercent || '0'),
         paymentMethod: form.paymentMethod,
         dueDate: form.dueDate ? new Date(form.dueDate) : null,
-        items: items.map((it) => ({
+        items: items.map((it, idx) => ({
           description: it.description,
           quantity: parseInt(it.quantity || '0'),
-          unitPrice: parseFloat(it.unitPrice || '0'),
+          unitPrice: toDecimal(it.unitPrice || '0'),
+          groupId: idx === 0 && form.groupId ? parseInt(form.groupId) : undefined,
         })),
       })
       setShowCreate(false)
-      setForm({ clientId: '', description: '', taxPercent: '0', paymentMethod: 'cash', dueDate: '' })
+      setForm({ clientId: '', description: '', taxPercent: '0', paymentMethod: 'cash', dueDate: '', groupId: '' })
       setItems([{ ...blankItem }])
+      setGroups([])
       addNotification('Sukses', 'Fatura u krijua.', 'success')
       fetchPending()
     } catch (err: any) {
@@ -117,16 +154,16 @@ export default function AdminInvoices() {
       {error && <div className="rounded-lg border border-gray-300 bg-gray-100 px-4 py-2.5 text-sm text-gray-800">{error}</div>}
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-        <StatCard icon="🧾" label="Fatura të papaguara" value={loading ? '…' : invoices.length} />
-        <StatCard icon="⏰" label="Të vonuara" value={loading ? '…' : overdue} />
-        <StatCard icon="💶" label="Borxh total" value={loading ? '…' : eur(total)} />
+        <StatCard icon={<Receipt className="h-5 w-5" />} label="Fatura të papaguara" value={loading ? '…' : invoices.length} />
+        <StatCard icon={<Clock className="h-5 w-5" />} label="Të vonuara" value={loading ? '…' : overdue} />
+        <StatCard icon={<Banknote className="h-5 w-5" />} label="Borxh total" value={loading ? '…' : eur(total)} />
       </div>
 
       <Panel title="Të papaguara">
         {loading ? (
           <p className="py-6 text-center text-sm text-gray-400">Duke ngarkuar…</p>
         ) : invoices.length === 0 ? (
-          <EmptyState icon="✅" text="S'ka fatura të papaguara." />
+          <EmptyState icon={<CheckCircle className="h-5 w-5" />} text="S'ka fatura të papaguara." />
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
@@ -165,10 +202,35 @@ export default function AdminInvoices() {
         <Modal title="Krijo faturë" onClose={() => setShowCreate(false)}>
           <form onSubmit={create} className="space-y-4">
             <div className="grid grid-cols-2 gap-3">
-              <Field label="Client ID"><input type="number" value={form.clientId} onChange={(e) => setForm((p) => ({ ...p, clientId: e.target.value }))} required className={fieldCls} /></Field>
+              <Field label="Klienti">
+                <select value={form.clientId} onChange={(e) => setForm((p) => ({ ...p, clientId: e.target.value }))} required className={fieldCls}>
+                  <option value="" disabled>Zgjedh klientin…</option>
+                  {clients.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+                </select>
+              </Field>
               <Field label="Afati (dueDate)"><input type="date" value={form.dueDate} onChange={(e) => setForm((p) => ({ ...p, dueDate: e.target.value }))} className={fieldCls} /></Field>
             </div>
             <Field label="Përshkrimi"><input value={form.description} onChange={(e) => setForm((p) => ({ ...p, description: e.target.value }))} className={fieldCls} /></Field>
+
+            {form.clientId && (
+              <Field label="Grupi (opsional)">
+                <select value={form.groupId} onChange={(e) => setForm((p) => ({ ...p, groupId: e.target.value }))} className={fieldCls}>
+                  <option value="">Pa grup — vetëm faturë</option>
+                  {suggestLoading ? (
+                    <option value="" disabled>Duke ngarkuar…</option>
+                  ) : (
+                    groups.map((g) => (
+                      <option key={g.id} value={g.id}>
+                        {g.name} ({g.membersCount}/{g.maxCapacity})
+                      </option>
+                    ))
+                  )}
+                </select>
+                {!suggestLoading && groups.length === 0 && (
+                  <p className="mt-1 text-xs text-gray-400">S'ka grupe të përshtatshëm (të gjitha të plota ose konflikt orari).</p>
+                )}
+              </Field>
+            )}
 
             <div>
               <div className="mb-2 flex items-center justify-between">
@@ -180,15 +242,15 @@ export default function AdminInvoices() {
                   <div key={i} className="flex gap-2">
                     <input placeholder="Përshkrimi" value={it.description} onChange={(e) => setItem(i, 'description', e.target.value)} required className={`${fieldCls} flex-1`} />
                     <input type="number" placeholder="Sasia" value={it.quantity} onChange={(e) => setItem(i, 'quantity', e.target.value)} className={`${fieldCls} w-20`} />
-                    <input type="number" step="0.01" placeholder="Çmimi" value={it.unitPrice} onChange={(e) => setItem(i, 'unitPrice', e.target.value)} className={`${fieldCls} w-24`} />
-                    <button type="button" onClick={() => removeItem(i)} className="px-2 text-gray-400 hover:text-gray-700">✕</button>
+                    <input type="text" inputMode="decimal" placeholder="Çmimi" value={it.unitPrice} onChange={(e) => setItem(i, 'unitPrice', e.target.value)} className={`${fieldCls} w-24`} />
+                    <button type="button" onClick={() => removeItem(i)} className="px-2 text-gray-400 hover:text-gray-700">X</button>
                   </div>
                 ))}
               </div>
             </div>
 
             <div className="grid grid-cols-2 gap-3">
-              <Field label="Tatimi (%)"><input type="number" step="0.01" value={form.taxPercent} onChange={(e) => setForm((p) => ({ ...p, taxPercent: e.target.value }))} className={fieldCls} /></Field>
+              <Field label="Tatimi (%)"><input type="text" inputMode="decimal" value={form.taxPercent} onChange={(e) => setForm((p) => ({ ...p, taxPercent: e.target.value }))} className={fieldCls} /></Field>
               <Field label="Metoda e pagesës">
                 <select value={form.paymentMethod} onChange={(e) => setForm((p) => ({ ...p, paymentMethod: e.target.value }))} className={fieldCls}>
                   <option value="cash">Kontant</option>

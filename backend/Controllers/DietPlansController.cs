@@ -18,12 +18,38 @@ public class DietPlansController : ControllerBase
         _context = context;
     }
 
+    private bool IsStaffOrAbove() =>
+        User.IsInRole("Admin") || User.IsInRole("GymOwner") || User.IsInRole("Trainer") || User.IsInRole("Staff");
+
+    private async Task<int?> OwnClientIdAsync()
+    {
+        var uid = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+        if (!int.TryParse(uid, out var userId)) return null;
+        return await _context.Clients.Where(c => c.UserId == userId).Select(c => (int?)c.Id).FirstOrDefaultAsync();
+    }
+
+    private async Task<bool> CanAccessClientAsync(int clientId)
+    {
+        if (IsStaffOrAbove()) return true;
+        var own = await OwnClientIdAsync();
+        return own == clientId;
+    }
+
     // GET: api/dietplans?clientId=5&trainerId=1
     [HttpGet]
     public async Task<IActionResult> GetDietPlans(
         [FromQuery] int? trainerId,
         [FromQuery] int? clientId)
     {
+        // A client may only ever list their own plans, never another client's.
+        if (!IsStaffOrAbove())
+        {
+            var own = await OwnClientIdAsync();
+            if (own == null) return Forbid();
+            clientId = own;
+            trainerId = null;
+        }
+
         var query = _context.DietPlans
             .Include(dp => dp.Trainer)
             .Include(dp => dp.Client)
@@ -58,12 +84,13 @@ public class DietPlansController : ControllerBase
     public async Task<IActionResult> GetDietPlan(int id)
     {
         var plan = await _context.DietPlans
-            .Include(dp => dp.Trainer)
-            .Include(dp => dp.Client)
+            .Include(dp => dp.Trainer).ThenInclude(t => t.User)
+            .Include(dp => dp.Client).ThenInclude(c => c.User)
             .FirstOrDefaultAsync(dp => dp.Id == id);
 
         if (plan == null)
             return NotFound();
+        if (!await CanAccessClientAsync(plan.ClientId)) return Forbid();
 
         return Ok(new
         {

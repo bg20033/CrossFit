@@ -1,11 +1,30 @@
 import axios from 'axios'
 import type { AxiosError, InternalAxiosRequestConfig } from 'axios'
 
-const baseURL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api'
+export const API_BASE_URL = import.meta.env.VITE_API_URL || '/api'
+
+export function getApiErrorMessage(error: unknown, fallback = 'Kërkesa dështoi') {
+  if (axios.isAxiosError(error)) {
+    if (error.code === 'ECONNABORTED') return 'Serveri nuk u përgjigj me kohë. Provo përsëri.'
+    if (!error.response) return 'Nuk ka lidhje me serverin. Kontrollo internetin ose API-n.'
+
+    const data = error.response.data
+    if (typeof data === 'string' && data.trim()) return data
+    if (data?.message) return String(data.message)
+    if (data?.error) return String(data.error)
+    if (data?.title) return String(data.title)
+    if (data?.errors && typeof data.errors === 'object') {
+      const first = Object.values(data.errors).flat().find(Boolean)
+      if (first) return String(first)
+    }
+  }
+  if (error instanceof Error && error.message) return error.message
+  return fallback
+}
 
 // Single shared axios instance for the whole app (services/api wraps this too).
 const api = axios.create({
-  baseURL,
+  baseURL: API_BASE_URL,
   headers: { 'Content-Type': 'application/json' },
   timeout: 15000,
 })
@@ -32,7 +51,7 @@ async function refreshAccessToken(): Promise<string | null> {
   if (!refreshToken) return null
   try {
     // bare axios (not `api`) to avoid interceptor recursion
-    const res = await axios.post(`${baseURL}/auth/refresh`, { refreshToken })
+    const res = await axios.post(`${API_BASE_URL}/auth/refresh`, { refreshToken })
     localStorage.setItem('authToken', res.data.token)
     if (res.data.refreshToken) localStorage.setItem('refreshToken', res.data.refreshToken)
     return res.data.token as string

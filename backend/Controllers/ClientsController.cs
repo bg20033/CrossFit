@@ -19,6 +19,17 @@ public class ClientsController : ControllerBase
         _context = context;
     }
 
+    private async Task<string> NewQrTokenAsync()
+    {
+        string token;
+        do
+        {
+            token = $"SUCF-{Guid.NewGuid():N}".ToUpperInvariant();
+        }
+        while (await _context.Clients.IgnoreQueryFilters().AnyAsync(c => c.QrToken == token));
+        return token;
+    }
+
     // GET: api/clients/me -> client profile for the logged-in user (auto-created on first access)
     [HttpGet("me")]
     public async Task<IActionResult> GetMyClientProfile()
@@ -29,26 +40,51 @@ public class ClientsController : ControllerBase
 
         var client = await _context.Clients
             .Include(c => c.User)
+            .Include(c => c.Trainer)
+                .ThenInclude(t => t!.User)
+            .Include(c => c.Groups)
             .FirstOrDefaultAsync(c => c.UserId == userId);
 
         if (client == null)
         {
             var user = await _context.Users.FindAsync(userId);
             if (user == null) return NotFound();
-            client = new Client { UserId = userId, MembershipType = "standard", IsActive = true };
+            client = new Client
+            {
+                UserId = userId,
+                MembershipType = "standard",
+                IsActive = true,
+                QrToken = await NewQrTokenAsync()
+            };
             _context.Clients.Add(client);
             await _context.SaveChangesAsync();
             await _context.Entry(client).Reference(c => c.User).LoadAsync();
         }
+        else if (string.IsNullOrWhiteSpace(client.QrToken))
+        {
+            client.QrToken = await NewQrTokenAsync();
+            client.UpdatedAt = DateTime.UtcNow;
+            await _context.SaveChangesAsync();
+        }
+
+        var groupName = client.Groups
+            .OrderBy(g => g.ScheduleStart)
+            .Select(g => g.Name)
+            .FirstOrDefault();
 
         return Ok(new
         {
             client.Id,
+            client.UserId,
             client.User.Name,
             client.User.Email,
             client.MembershipType,
             client.MembershipExpiry,
+            client.QrToken,
             client.IsActive,
+            client.StartDate,
+            TrainerName = client.Trainer?.User.Name,
+            GroupName = groupName
         });
     }
 
@@ -85,6 +121,7 @@ public class ClientsController : ControllerBase
                 c.User.Email,
                 c.MembershipType,
                 c.MembershipExpiry,
+                c.QrToken,
                 c.IsActive,
                 Trainer = c.Trainer != null ? c.Trainer.User.Name : null,
                 c.StartDate,
@@ -102,7 +139,7 @@ public class ClientsController : ControllerBase
     {
         var client = await _context.Clients
             .Include(c => c.User)
-            .Include(c => c.Trainer)
+            .Include(c => c.Trainer).ThenInclude(t => t!.User)
             .Include(c => c.Goals)
             .FirstOrDefaultAsync(c => c.Id == id);
 
@@ -120,6 +157,7 @@ public class ClientsController : ControllerBase
             client.User.Email,
             client.MembershipType,
             client.MembershipExpiry,
+            client.QrToken,
             client.IsActive,
             Trainer = client.Trainer?.User.Name,
             client.StartDate,
@@ -134,27 +172,33 @@ public class ClientsController : ControllerBase
     [HttpPost("create")]
     public async Task<IActionResult> CreateClient([FromBody] CreateClientRequest request)
     {
-        var userExists = await _context.Users.AnyAsync(u => u.Email == request.Email);
+        var email = request.Email.Trim().ToLowerInvariant();
+        var name = request.Name.Trim();
+        var membershipType = string.IsNullOrWhiteSpace(request.MembershipType) ? "standard" : request.MembershipType.Trim();
+        var userExists = await _context.Users.AnyAsync(u => u.Email == email);
         if (userExists)
-            return BadRequest("Email already exists");
+            return BadRequest(new { message = "Email already exists" });
+        if (request.MembershipExpiry.HasValue && request.MembershipExpiry.Value.Date < DateTime.UtcNow.Date)
+            return BadRequest(new { message = "Membership expiry cannot be in the past" });
 
         var passwordHash = BCrypt.Net.BCrypt.HashPassword(request.Password);
         var user = new User
         {
-            Email = request.Email,
-            Name = request.Name,
+            Email = email,
+            Name = name,
             PasswordHash = passwordHash,
             Role = UserRole.Client
         };
 
-        var plan = await _context.MembershipPlans.FirstOrDefaultAsync(p => p.Name == request.MembershipType);
+        var plan = await _context.MembershipPlans.FirstOrDefaultAsync(p => p.Name == membershipType);
         var client = new Client
         {
             User = user,
-            MembershipType = request.MembershipType ?? "standard",
+            MembershipType = membershipType,
             PlanId = plan?.Id,
             MembershipExpiry = request.MembershipExpiry ?? (plan != null ? DateTime.UtcNow.AddDays(plan.DurationDays) : DateTime.UtcNow.AddMonths(1)),
-            IsActive = true
+            IsActive = true,
+            QrToken = await NewQrTokenAsync()
         };
 
         _context.Users.Add(user);
@@ -169,7 +213,7 @@ public class ClientsController : ControllerBase
             {
                 InvoiceNumber = invoiceNumber,
                 ClientId = client.Id,
-                Description = $"{request.MembershipType} membership",
+                Description = $"{membershipType} membership",
                 Subtotal = request.MembershipPrice,
                 TaxAmount = 0,
                 TotalAmount = request.MembershipPrice,
@@ -179,7 +223,7 @@ public class ClientsController : ControllerBase
 
             invoice.Items.Add(new InvoiceItem
             {
-                Description = $"{request.MembershipType} membership",
+                Description = $"{membershipType} membership",
                 Quantity = 1,
                 UnitPrice = request.MembershipPrice,
                 Total = request.MembershipPrice
@@ -189,7 +233,7 @@ public class ClientsController : ControllerBase
             await _context.SaveChangesAsync();
         }
 
-        return Ok(new { message = "Client created successfully", id = client.Id });
+        return Ok(new { message = "Client created successfully", id = client.Id, qrToken = client.QrToken });
     }
 
     // PUT: api/clients/{id}
@@ -204,20 +248,24 @@ public class ClientsController : ControllerBase
         if (client == null)
             return NotFound();
 
-        client.User.Name = request.Name ?? client.User.Name;
-        if (request.MembershipType != null)
+        if (!string.IsNullOrWhiteSpace(request.Name))
+            client.User.Name = request.Name.Trim();
+        if (!string.IsNullOrWhiteSpace(request.MembershipType))
         {
-            client.MembershipType = request.MembershipType;
-            client.PlanId = (await _context.MembershipPlans.FirstOrDefaultAsync(p => p.Name == request.MembershipType))?.Id;
+            var membershipType = request.MembershipType.Trim();
+            client.MembershipType = membershipType;
+            client.PlanId = (await _context.MembershipPlans.FirstOrDefaultAsync(p => p.Name == membershipType))?.Id;
         }
+        if (request.MembershipExpiry.HasValue && request.MembershipExpiry.Value.Date < DateTime.UtcNow.Date)
+            return BadRequest(new { message = "Membership expiry cannot be in the past" });
         client.MembershipExpiry = request.MembershipExpiry ?? client.MembershipExpiry;
         client.IsActive = request.IsActive ?? client.IsActive;
 
         if (request.TrainerId.HasValue)
         {
             var trainer = await _context.Trainers.FindAsync(request.TrainerId);
-            if (trainer != null)
-                client.TrainerId = request.TrainerId;
+            if (trainer == null) return BadRequest(new { message = "Trainer not found" });
+            client.TrainerId = request.TrainerId;
         }
 
         client.UpdatedAt = DateTime.UtcNow;
@@ -332,7 +380,7 @@ public class CreateClientRequest
 {
     [Required, MaxLength(120)] public string Name { get; set; } = null!;
     [Required, EmailAddress, MaxLength(256)] public string Email { get; set; } = null!;
-    [Required, MinLength(6), MaxLength(128)] public string Password { get; set; } = null!;
+    [Required, MinLength(8), MaxLength(128)] public string Password { get; set; } = null!;
     [MaxLength(60)] public string? MembershipType { get; set; } = "standard";
     public DateTime? MembershipExpiry { get; set; }
     [Range(0, 1_000_000)] public decimal MembershipPrice { get; set; } = 0;

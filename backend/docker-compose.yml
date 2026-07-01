@@ -1,14 +1,12 @@
-version: '3.8'
-
 services:
   db:
     image: mysql:8.0
     container_name: standup_db
     environment:
-      MYSQL_ROOT_PASSWORD: root123
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-change-me-local-root}
       MYSQL_DATABASE: standup_fitness
-      MYSQL_USER: standup_user
-      MYSQL_PASSWORD: standup123
+      MYSQL_USER: ${MYSQL_USER:-standup_user}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-change-me-local-user}
     ports:
       - "3306:3306"
     volumes:
@@ -24,10 +22,16 @@ services:
       dockerfile: Dockerfile
     container_name: standup_api
     environment:
-      - ASPNETCORE_ENVIRONMENT=Development
-      - ConnectionStrings__DefaultConnection=Server=db;Port=3306;Database=standup_fitness;User=root;Password=root123;
+      - ASPNETCORE_ENVIRONMENT=${ASPNETCORE_ENVIRONMENT:-Development}
+      - ASPNETCORE_URLS=http://+:5050
+      - AllowedHosts=${ALLOWED_HOSTS:-localhost}
+      - ConnectionStrings__DefaultConnection=Server=db;Port=3306;Database=standup_fitness;User=${MYSQL_USER:-standup_user};Password=${MYSQL_PASSWORD:-change-me-local-user};
+      - JwtSettings__SecretKey=${JWT_SECRET:-dev-only-secret-key-change-before-production-standup}
+      - JwtSettings__Issuer=StandUpFitness
+      - JwtSettings__Audience=StandUpFitnessClient
+      - Cors__AllowedOrigins__0=${FRONTEND_ORIGIN:-http://localhost:5180}
     ports:
-      - "5000:5000"
+      - "5050:5050"
     depends_on:
       db:
         condition: service_healthy
@@ -38,11 +42,11 @@ services:
     build:
       context: ./frontend
       dockerfile: Dockerfile
+      args:
+        VITE_API_URL: ${VITE_API_URL:-http://localhost:5050/api}
     container_name: standup_frontend
     ports:
-      - "5173:5173"
-    environment:
-      - VITE_API_URL=http://api:5000/api
+      - "5180:5180"
     depends_on:
       - api
     volumes:

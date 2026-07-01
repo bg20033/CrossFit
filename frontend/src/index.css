@@ -2,50 +2,55 @@
 @tailwind components;
 @tailwind utilities;
 
+/*
+ * Stand Up CrossFit — token layer.
+ * Palette: warm canvas #ECEAE4, ink #16130F, single red accent #EE3A24.
+ * Type: Space Grotesk (display/numbers) · Hanken Grotesk (UI) · Space Mono (labels).
+ */
 @layer base {
   :root {
-    --background: 0 0% 100%;
-    --foreground: 0 0% 3.6%;
-    --card: 0 0% 100%;
-    --card-foreground: 0 0% 3.6%;
+    --background: 48 16% 91%;          /* canvas  #ECEAE4 */
+    --foreground: 34 19% 7%;           /* ink     #16130F */
+    --card: 0 0% 100%;                 /* surface #FFFFFF */
+    --card-foreground: 34 19% 7%;
     --popover: 0 0% 100%;
-    --popover-foreground: 0 0% 3.6%;
-    --muted: 0 0% 96.1%;
-    --muted-foreground: 0 0% 45.1%;
-    --accent: 0 84.2% 60.2%;
-    --accent-foreground: 0 0% 100%;
-    --destructive: 0 84.2% 60.2%;
+    --popover-foreground: 34 19% 7%;
+    --muted: 44 28% 94%;               /* surface-alt #F4F2EC */
+    --muted-foreground: 33 9% 40%;     /* ink-soft #6E665C */
+    --accent: 44 28% 94%;              /* neutral hover surface */
+    --accent-foreground: 34 19% 7%;
+    --destructive: 7 85% 54%;          /* red #EE3A24 */
     --destructive-foreground: 0 0% 100%;
-    --border: 0 0% 89.8%;
-    --input: 0 0% 89.8%;
-    --primary: 0 0% 9%;
+    --border: 40 18% 83%;              /* line #DCD7CD */
+    --input: 40 18% 83%;
+    --primary: 34 19% 7%;              /* ink */
     --primary-foreground: 0 0% 100%;
-    --secondary: 0 0% 96.1%;
-    --secondary-foreground: 0 0% 9%;
-    --ring: 0 0% 3.6%;
-    --radius: 0.5rem;
+    --secondary: 44 28% 94%;           /* surface-alt */
+    --secondary-foreground: 34 19% 7%;
+    --ring: 33 9% 40%;                 /* ink-soft */
+    --radius: 0.875rem;                /* 14px cards */
   }
 
   .dark {
-    --background: 0 0% 3.6%;
-    --foreground: 0 0% 98.2%;
-    --card: 0 0% 3.6%;
-    --card-foreground: 0 0% 98.2%;
-    --popover: 0 0% 3.6%;
-    --popover-foreground: 0 0% 98.2%;
-    --muted: 0 0% 14.9%;
-    --muted-foreground: 0 0% 63.9%;
-    --accent: 0 84.2% 60.2%;
-    --accent-foreground: 0 0% 9%;
-    --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 0 0% 9%;
-    --border: 0 0% 14.9%;
-    --input: 0 0% 14.9%;
-    --primary: 0 0% 98.2%;
-    --primary-foreground: 0 0% 9%;
-    --secondary: 0 0% 14.9%;
-    --secondary-foreground: 0 0% 98.2%;
-    --ring: 0 0% 83.3%;
+    --background: 34 19% 7%;           /* ink canvas */
+    --foreground: 0 0% 98%;
+    --card: 30 12% 13%;                /* dark panel inset #26211B */
+    --card-foreground: 0 0% 98%;
+    --popover: 30 12% 13%;
+    --popover-foreground: 0 0% 98%;
+    --muted: 32 11% 18%;
+    --muted-foreground: 40 7% 65%;
+    --accent: 32 11% 18%;
+    --accent-foreground: 0 0% 98%;
+    --destructive: 7 85% 54%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 32 11% 20%;
+    --input: 32 11% 20%;
+    --primary: 0 0% 98%;
+    --primary-foreground: 34 19% 7%;
+    --secondary: 32 11% 18%;
+    --secondary-foreground: 0 0% 98%;
+    --ring: 40 7% 65%;
   }
 }
 
@@ -53,7 +58,58 @@
   * {
     @apply border-border;
   }
-  body {
-    @apply bg-background text-foreground;
+  html {
+    -webkit-text-size-adjust: 100%;
   }
+  body {
+    @apply bg-background font-sans text-foreground antialiased;
+  }
+  /* Headings & numerals use Space Grotesk with tight tracking. */
+  h1, h2, h3, h4, h5, h6 {
+    @apply font-display tracking-tight text-foreground;
+  }
+  /* Tabular figures for stat values & times. */
+  .nums {
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+@layer components {
+  /* Frosted "liquid glass" — nav, client tab bar, hero overlays. */
+  .glass {
+    background: rgba(255, 255, 255, 0.72);
+    -webkit-backdrop-filter: blur(16px);
+    backdrop-filter: blur(16px);
+    border: 1px solid rgba(255, 255, 255, 0.55);
+  }
+  .glass-dark {
+    background: rgba(22, 19, 15, 0.55);
+    -webkit-backdrop-filter: blur(16px);
+    backdrop-filter: blur(16px);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+  }
+  /* Mono micro-label: section numbers, timestamps, small caps. */
+  .label-mono {
+    @apply font-mono uppercase tracking-[0.08em] text-gray-400;
+    font-size: 11px;
+  }
+  .placeholder-striped {
+    @apply bg-striped;
+  }
+}
+
+/* Subtle, on-brand scrollbar. */
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+*::-webkit-scrollbar-thumb {
+  background: #DCD7CD;
+  border-radius: 100px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+*::-webkit-scrollbar-thumb:hover {
+  background: #C7C0B4;
+  background-clip: padding-box;
 }

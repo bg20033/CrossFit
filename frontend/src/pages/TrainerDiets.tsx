@@ -1,3 +1,4 @@
+import { UtensilsCrossed } from 'lucide-react'
 import { useState, useEffect } from 'react'
 import { Button } from '../components/ui/button'
 import { useAuth } from '../contexts/AuthContext'
@@ -110,7 +111,7 @@ export default function TrainerDiets() {
         {loading ? (
           <p className="py-6 text-center text-sm text-gray-400">Duke ngarkuar…</p>
         ) : plans.length === 0 ? (
-          <EmptyState icon="🍽️" text="Ende s'ke plane diete. Krijo të parin me '+ Plan i ri'." />
+          <EmptyState icon={<UtensilsCrossed className="h-5 w-5" />} text="Ende s'ke plane diete. Krijo të parin me '+ Plan i ri'." />
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">

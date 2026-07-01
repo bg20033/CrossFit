@@ -1,6 +1,14 @@
 import tailwindcssAnimate from "tailwindcss-animate"
 
-/** @type {import('tailwindcss').Config} */
+/**
+ * Stand Up CrossFit — design tokens (README → Design Tokens).
+ * Flat, minimal: warm canvas, black/white, single red accent #EE3A24.
+ *
+ * Strategy: the app uses `coral-*` for the brand accent and `gray-*` for
+ * neutrals throughout. We remap both scales to the spec palette so every
+ * existing utility class re-skins consistently, and expose semantic aliases
+ * (canvas / surface / ink / line / success) for new code.
+ */
 export default {
   darkMode: ["class"],
   content: [
@@ -10,18 +18,50 @@ export default {
   theme: {
     extend: {
       colors: {
+        // Brand accent — single red #EE3A24 (replaces old coral).
         coral: {
-          50: "#FFF1F1",
-          100: "#FFE0DF",
-          200: "#FFC4C2",
-          300: "#FF9D99",
-          400: "#FF6F6B",
-          500: "#FB5A5C",
-          600: "#EE3C42",
-          700: "#C72A30",
-          800: "#A4242A",
-          900: "#882327",
+          50: "#FBE3DD",  // accent-soft
+          100: "#F8CFC6",
+          200: "#F3A99B",
+          300: "#EF8270",
+          400: "#F05C42",
+          500: "#EE3A24",  // accent (primary)
+          600: "#D32E1A",  // accent hover
+          700: "#B03A26",  // accent-ink (text on accent-soft)
+          800: "#8A2A1B",
+          900: "#6B2014",
         },
+        // Neutrals — warm-tinted to match the canvas/ink system.
+        gray: {
+          50: "#F7F5F0",
+          100: "#ECE8E0",  // line-subtle / inset chips
+          200: "#DCD7CD",  // line / borders
+          300: "#C7C0B4",  // hover borders
+          400: "#9A938A",  // faint / tertiary labels
+          500: "#6E665C",  // ink-soft / secondary text
+          600: "#574F46",
+          700: "#403A33",
+          800: "#2A2620",  // dark panel inset
+          900: "#16130F",  // ink / primary text
+        },
+        // Semantic aliases (spec names) for new components.
+        canvas: "#ECEAE4",
+        surface: "#FFFFFF",
+        "surface-alt": "#F4F2EC",
+        ink: {
+          DEFAULT: "#16130F",
+          soft: "#6E665C",
+          faint: "#9A938A",
+        },
+        line: {
+          DEFAULT: "#DCD7CD",
+          subtle: "#ECE8E0",
+        },
+        accentsoft: "#FBE3DD",
+        accentink: "#B03A26",
+        success: "#1F9D55",
+
+        // shadcn CSS-var bindings (kept; values rewired in index.css).
         border: "hsl(var(--border))",
         input: "hsl(var(--input))",
         ring: "hsl(var(--ring))",
@@ -56,10 +96,36 @@ export default {
           foreground: "hsl(var(--card-foreground))",
         },
       },
+      fontFamily: {
+        sans: ['"Hanken Grotesk"', 'system-ui', 'sans-serif'],
+        display: ['"Space Grotesk"', '"Hanken Grotesk"', 'sans-serif'],
+        mono: ['"Space Mono"', 'ui-monospace', 'monospace'],
+      },
+      letterSpacing: {
+        tightest: '-0.03em',
+      },
       borderRadius: {
-        lg: "var(--radius)",
-        md: "calc(var(--radius) - 2px)",
-        sm: "calc(var(--radius) - 4px)",
+        lg: "var(--radius)",                  // 14px cards
+        md: "calc(var(--radius) - 4px)",      // 10px buttons/inputs
+        sm: "calc(var(--radius) - 6px)",      // 8px chips
+        xl: "16px",
+        '2xl': "20px",
+      },
+      boxShadow: {
+        DEFAULT: "none",
+        sm: "none",
+        md: "none",
+        lg: "none",
+        xl: "none",
+        "2xl": "none",
+        inner: "none",
+        card: "none",
+        phone: "none",
+        soft: "none",
+      },
+      backgroundImage: {
+        striped:
+          "repeating-linear-gradient(135deg, #F1EEE7 0 7px, #F7F4EE 7px 14px)",
       },
     },
   },

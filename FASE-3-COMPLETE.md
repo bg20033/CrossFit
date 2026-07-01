@@ -125,8 +125,8 @@ const handleDownloadPDF = async (plan: WorkoutPlan) => {
     content: plan.content
   })
   
-  if (success) {
-    console.log('PDF downloaded successfully')
+  if (!success) {
+    throw new Error('PDF download failed')
   }
 }
 ```
@@ -311,7 +311,7 @@ frontend/
 
 For issues or questions:
 1. Check browser console for errors
-2. Verify API is running on localhost:5000
+2. Verify API is running on localhost:5050
 3. Ensure database migrations applied
 4. Check that jsPDF is installed
 5. Restart dev server if needed

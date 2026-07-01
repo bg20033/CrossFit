@@ -1,3 +1,4 @@
+import { UtensilsCrossed } from 'lucide-react'
 import { useState, useEffect } from 'react'
 import { Button } from '../components/ui/button'
 import { useAuth } from '../contexts/AuthContext'
@@ -78,7 +79,7 @@ export default function ClientDiet() {
         {loading ? (
           <p className="py-6 text-center text-sm text-gray-400">Duke ngarkuar…</p>
         ) : plans.length === 0 ? (
-          <EmptyState icon="🍽️" text="Ende s'ke plan diete. Kontakto trajnerin tënd." />
+          <EmptyState icon={<UtensilsCrossed className="h-5 w-5" />} text="Ende s'ke plan diete. Kontakto trajnerin tënd." />
         ) : (
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             {plans.map((plan) => (
@@ -88,7 +89,7 @@ export default function ClientDiet() {
                 className="rounded-xl border border-gray-200 p-5 text-left transition hover:border-gray-300"
               >
                 <div className="flex items-start justify-between">
-                  <h3 className="text-lg font-semibold text-gray-900">🍽️ {plan.name}</h3>
+                  <h3 className="text-lg font-semibold text-gray-900">{plan.name}</h3>
                   {plan.isActive && <Badge accent="green">Aktiv</Badge>}
                 </div>
                 <p className="mt-1 line-clamp-2 text-sm text-gray-500">{plan.description}</p>
@@ -103,7 +104,7 @@ export default function ClientDiet() {
       </Panel>
 
       {selected && (
-        <Modal title={`🍽️ ${selected.name}`} onClose={() => setSelected(null)}>
+        <Modal title={`${selected.name}`} onClose={() => setSelected(null)}>
           <div className="space-y-4">
             <p className="text-sm text-gray-600">{selected.description}</p>
             <div className="grid grid-cols-2 gap-3">
@@ -129,7 +130,7 @@ export default function ClientDiet() {
                     }
                     items={[
                       ...(macros.carbs != null ? [{ label: 'Karbohidrate', value: macros.carbs, goal: goals.carbs ?? macros.carbs, color: '#F59E0B' }] : []),
-                      ...(macros.protein != null ? [{ label: 'Proteina', value: macros.protein, goal: goals.protein ?? macros.protein, color: '#FB5A5C' }] : []),
+                      ...(macros.protein != null ? [{ label: 'Proteina', value: macros.protein, goal: goals.protein ?? macros.protein, color: '#EE3A24' }] : []),
                       ...(macros.fat != null ? [{ label: 'Yndyra', value: macros.fat, goal: goals.fat ?? macros.fat, color: '#0EA5E9' }] : []),
                     ]}
                   />
@@ -141,7 +142,7 @@ export default function ClientDiet() {
               <pre className="max-h-48 overflow-auto rounded-lg bg-gray-50 p-3 text-xs text-gray-700">{parsedContent}</pre>
             </div>
             <Button onClick={() => downloadPDF(selected)} className="w-full bg-coral-500 text-white hover:bg-coral-600">
-              📥 Shkarko PDF
+              Shkarko PDF
             </Button>
           </div>
         </Modal>

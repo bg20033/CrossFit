@@ -6,13 +6,17 @@ public enum UserRole
     Trainer,
     Client,
     GymOwner,
-    Staff
+    Staff,
+    Cashier,        // Arka — front desk POS + QR access
+    TrainerTenant,  // rental trainer (micro-gym inside the gym)
+    TenantClient    // client of a tenant trainer (isolated)
 }
 
 public class User
 {
     public int Id { get; set; }
     public string Email { get; set; } = null!;
+    public string? Phone { get; set; }
     public string PasswordHash { get; set; } = null!;
     public string Name { get; set; } = null!;
     public UserRole Role { get; set; }
@@ -21,7 +25,7 @@ public class User
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
 
     // Navigation properties
-    public ICollection<Trainer> TrainerProfile { get; set; } = new List<Trainer>();
-    public ICollection<Client> ClientProfile { get; set; } = new List<Client>();
-    public ICollection<GymOwner> GymOwnerProfile { get; set; } = new List<GymOwner>();
+    public ICollection<Trainer> TrainerProfiles { get; set; } = new List<Trainer>();
+    public ICollection<Client> ClientProfiles { get; set; } = new List<Client>();
+    public ICollection<GymOwner> GymOwnerProfiles { get; set; } = new List<GymOwner>();
 }

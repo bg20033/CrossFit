@@ -89,15 +89,16 @@ public class StaffController : ControllerBase
     [HttpPost("create")]
     public async Task<IActionResult> CreateStaff([FromBody] CreateStaffRequest request)
     {
-        var userExists = await _context.Users.AnyAsync(u => u.Email == request.Email);
+        var email = request.Email.Trim().ToLowerInvariant();
+        var userExists = await _context.Users.AnyAsync(u => u.Email == email);
         if (userExists)
-            return BadRequest("Email already exists");
+            return BadRequest(new { message = "Email already exists" });
 
         var passwordHash = BCrypt.Net.BCrypt.HashPassword(request.Password);
         var user = new User
         {
-            Email = request.Email,
-            Name = request.Name,
+            Email = email,
+            Name = request.Name.Trim(),
             PasswordHash = passwordHash,
             Role = UserRole.Staff
         };
@@ -105,7 +106,7 @@ public class StaffController : ControllerBase
         var staff = new Staff
         {
             User = user,
-            Position = request.Position,
+            Position = request.Position.Trim(),
             Salary = request.Salary,
             HireDate = DateTime.UtcNow,
             IsActive = true
@@ -129,10 +130,12 @@ public class StaffController : ControllerBase
         if (staff == null)
             return NotFound();
 
-        if (request.Name != null)
-            staff.User.Name = request.Name;
+        if (!string.IsNullOrWhiteSpace(request.Name))
+            staff.User.Name = request.Name.Trim();
 
-        staff.Position = request.Position ?? staff.Position;
+        staff.Position = string.IsNullOrWhiteSpace(request.Position) ? staff.Position : request.Position.Trim();
+        if (request.Salary.HasValue && request.Salary.Value < 0)
+            return BadRequest(new { message = "Salary cannot be negative" });
         staff.Salary = request.Salary ?? staff.Salary;
         staff.IsActive = request.IsActive ?? staff.IsActive;
 
@@ -195,13 +198,19 @@ public class StaffController : ControllerBase
         var staff = await _context.Staff.FindAsync(id);
         if (staff == null)
             return NotFound();
+        if (request.Year < 2000 || request.Year > DateTime.UtcNow.Year + 1)
+            return BadRequest(new { message = "Invalid payroll year" });
+        if (request.Month < 1 || request.Month > 12)
+            return BadRequest(new { message = "Invalid payroll month" });
+        if (request.HoursWorked < 0 || request.OvertimeHours < 0 || request.Bonus < 0 || request.Deductions < 0)
+            return BadRequest(new { message = "Payroll values cannot be negative" });
 
         // Check if salary already calculated for this period
         var existing = await _context.Salaries
             .FirstOrDefaultAsync(s => s.StaffId == id && s.Year == request.Year && s.Month == request.Month);
 
         if (existing != null && existing.Status == "paid")
-            return BadRequest("Salary already paid for this period");
+            return BadRequest(new { message = "Salary already paid for this period" });
 
         var baseSalary = staff.Salary;
         var overtimeAmount = request.OvertimeHours * staff.Salary * 1.5m / 160; // Assuming 160 hours/month
@@ -220,7 +229,7 @@ public class StaffController : ControllerBase
             Deductions = request.Deductions,
             TotalAmount = totalAmount,
             Status = "pending",
-            Notes = request.Notes
+            Notes = request.Notes?.Trim()
         };
 
         _context.Salaries.Add(salary);
@@ -245,7 +254,7 @@ public class CreateStaffRequest
 {
     [Required, MaxLength(120)] public string Name { get; set; } = null!;
     [Required, EmailAddress, MaxLength(256)] public string Email { get; set; } = null!;
-    [Required, MinLength(6), MaxLength(128)] public string Password { get; set; } = null!;
+    [Required, MinLength(8), MaxLength(128)] public string Password { get; set; } = null!;
     [Required, MaxLength(80)] public string Position { get; set; } = null!;
     [Range(0, 1_000_000)] public decimal Salary { get; set; }
 }

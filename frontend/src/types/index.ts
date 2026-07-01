@@ -1,4 +1,12 @@
-export type UserRole = 'admin' | 'trainer' | 'client' | 'gym_owner' | 'staff'
+export type UserRole =
+  | 'admin'
+  | 'trainer'
+  | 'client'
+  | 'gym_owner'
+  | 'staff'
+  | 'cashier'        // Arka — front desk POS + QR access
+  | 'trainer_tenant' // rental trainer running a micro-gym inside the gym
+  | 'tenant_client'  // client of a tenant trainer (isolated)
 
 export interface User {
   id: string
@@ -24,6 +32,7 @@ export interface RegisterData {
   password: string
   name: string
   role: UserRole
+  phone?: string
 }
 
 export interface RentalInquiry {

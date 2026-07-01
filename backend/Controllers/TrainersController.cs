@@ -69,6 +69,9 @@ public class TrainersController : ControllerBase
                 t.User.Email,
                 t.Specialization,
                 t.HourlyRate,
+                t.CommissionPerClient,
+                t.PaymentModel,
+                t.TrainerType,
                 t.IsAvailable,
                 ClientsCount = t.PersonalSessions.Count(),
                 t.CreatedAt
@@ -99,6 +102,9 @@ public class TrainersController : ControllerBase
             trainer.Specialization,
             trainer.Bio,
             trainer.HourlyRate,
+            trainer.CommissionPerClient,
+            trainer.PaymentModel,
+            trainer.TrainerType,
             trainer.IsAvailable,
             Groups = trainer.Groups.Select(g => new { g.Id, g.Name }),
             ClientsCount = trainer.PersonalSessions.Select(ps => ps.ClientId).Distinct().Count(),
@@ -111,15 +117,16 @@ public class TrainersController : ControllerBase
     [HttpPost("create")]
     public async Task<IActionResult> CreateTrainer([FromBody] CreateTrainerRequest request)
     {
-        var userExists = await _context.Users.AnyAsync(u => u.Email == request.Email);
+        var email = request.Email.Trim().ToLowerInvariant();
+        var userExists = await _context.Users.AnyAsync(u => u.Email == email);
         if (userExists)
-            return BadRequest("Email already exists");
+            return BadRequest(new { message = "Email already exists" });
 
         var passwordHash = BCrypt.Net.BCrypt.HashPassword(request.Password);
         var user = new User
         {
-            Email = request.Email,
-            Name = request.Name,
+            Email = email,
+            Name = request.Name.Trim(),
             PasswordHash = passwordHash,
             Role = UserRole.Trainer
         };
@@ -127,9 +134,12 @@ public class TrainersController : ControllerBase
         var trainer = new Trainer
         {
             User = user,
-            Specialization = request.Specialization,
-            Bio = request.Bio,
+            Specialization = request.Specialization.Trim(),
+            Bio = request.Bio?.Trim() ?? string.Empty,
             HourlyRate = request.HourlyRate,
+            CommissionPerClient = request.CommissionPerClient,
+            PaymentModel = string.IsNullOrWhiteSpace(request.PaymentModel) ? "prorated" : request.PaymentModel!.Trim(),
+            TrainerType = string.IsNullOrWhiteSpace(request.TrainerType) ? "employee" : request.TrainerType!.Trim(),
             IsAvailable = true
         };
 
@@ -151,12 +161,21 @@ public class TrainersController : ControllerBase
         if (trainer == null)
             return NotFound();
 
-        if (request.Name != null)
-            trainer.User.Name = request.Name;
+        if (!string.IsNullOrWhiteSpace(request.Name))
+            trainer.User.Name = request.Name.Trim();
 
-        trainer.Specialization = request.Specialization ?? trainer.Specialization;
-        trainer.Bio = request.Bio ?? trainer.Bio;
+        trainer.Specialization = string.IsNullOrWhiteSpace(request.Specialization) ? trainer.Specialization : request.Specialization.Trim();
+        trainer.Bio = request.Bio?.Trim() ?? trainer.Bio;
+        if (request.HourlyRate.HasValue && request.HourlyRate.Value < 0)
+            return BadRequest(new { message = "Hourly rate cannot be negative" });
         trainer.HourlyRate = request.HourlyRate ?? trainer.HourlyRate;
+        if (request.CommissionPerClient.HasValue && request.CommissionPerClient.Value < 0)
+            return BadRequest(new { message = "Commission per client cannot be negative" });
+        trainer.CommissionPerClient = request.CommissionPerClient ?? trainer.CommissionPerClient;
+        if (!string.IsNullOrWhiteSpace(request.PaymentModel))
+            trainer.PaymentModel = request.PaymentModel.Trim();
+        if (!string.IsNullOrWhiteSpace(request.TrainerType))
+            trainer.TrainerType = request.TrainerType.Trim();
         trainer.IsAvailable = request.IsAvailable ?? trainer.IsAvailable;
         trainer.UpdatedAt = DateTime.UtcNow;
 
@@ -176,18 +195,105 @@ public class TrainersController : ControllerBase
         var clients = await _context.Clients
             .Where(c => c.TrainerId == id)
             .Include(c => c.User)
-            .Select(c => new
-            {
-                c.Id,
-                c.User.Name,
-                c.User.Email,
-                c.MembershipType,
-                c.IsActive,
-                c.MembershipExpiry
-            })
+            .Include(c => c.Groups)
+            .Include(c => c.Goals)
+            .OrderBy(c => c.User.Name)
             .ToListAsync();
 
-        return Ok(clients);
+        var result = new List<object>();
+        foreach (var client in clients)
+        {
+            var latestProgress = await _context.ProgressLogs
+                .Where(p => p.ClientId == client.Id)
+                .OrderByDescending(p => p.Date)
+                .Select(p => new
+                {
+                    Weight = p.Weight,
+                    Chest = p.Chest ?? 0,
+                    Waist = p.Waist ?? 0,
+                    Hips = p.Hips ?? 0,
+                    Arms = p.Arms ?? 0,
+                    BodyFat = p.BodyFat ?? 0,
+                    UpdatedAt = p.Date
+                })
+                .FirstOrDefaultAsync();
+
+            var attendance = await _context.Attendance
+                .Where(a => a.ClientId == client.Id)
+                .Include(a => a.Group)
+                .OrderByDescending(a => a.AttendanceDate)
+                .Take(12)
+                .Select(a => new
+                {
+                    a.Id,
+                    Date = a.AttendanceDate,
+                    Present = a.IsPresent,
+                    GroupName = a.Group != null ? a.Group.Name : "Manual"
+                })
+                .ToListAsync();
+
+            var lastCheckIn = await _context.AttendanceLogs
+                .Where(a => a.ClientId == client.Id)
+                .OrderByDescending(a => a.CheckInTime)
+                .Select(a => (DateTime?)a.CheckInTime)
+                .FirstOrDefaultAsync();
+
+            var workoutPlans = await _context.WorkoutPlans
+                .Where(p => p.ClientId == client.Id && p.TrainerId == id)
+                .OrderByDescending(p => p.CreatedAt)
+                .Take(8)
+                .Select(p => new
+                {
+                    p.Id,
+                    Title = p.Name,
+                    Type = "workout",
+                    p.CreatedAt,
+                    Status = p.IsActive ? "active" : "draft"
+                })
+                .ToListAsync();
+
+            var dietPlans = await _context.DietPlans
+                .Where(p => p.ClientId == client.Id && p.TrainerId == id)
+                .OrderByDescending(p => p.CreatedAt)
+                .Take(8)
+                .Select(p => new
+                {
+                    p.Id,
+                    Title = p.Name,
+                    Type = "diet",
+                    p.CreatedAt,
+                    Status = p.IsActive ? "active" : "draft"
+                })
+                .ToListAsync();
+
+            result.Add(new
+            {
+                client.Id,
+                client.User.Name,
+                Phone = client.User.Phone ?? "",
+                client.User.Email,
+                ActivePackage = client.MembershipType,
+                GroupName = client.Groups.FirstOrDefault()?.Name ?? "—",
+                LastCheckIn = lastCheckIn,
+                Goals = string.Join(", ", client.Goals.Where(g => g.Status != "completed").Select(g => g.Title)),
+                Injuries = "",
+                Notes = "",
+                Measurements = latestProgress ?? new
+                {
+                    Weight = 0m,
+                    Chest = 0m,
+                    Waist = 0m,
+                    Hips = 0m,
+                    Arms = 0m,
+                    BodyFat = 0m,
+                    UpdatedAt = client.UpdatedAt
+                },
+                Attendance = attendance,
+                Plans = workoutPlans.Concat(dietPlans).OrderByDescending(p => p.CreatedAt).Take(12)
+            });
+        }
+
+        return Ok(result);
     }
 
     // GET: api/trainers/{id}/schedule
@@ -235,10 +341,13 @@ public class CreateTrainerRequest
 {
     [Required, MaxLength(120)] public string Name { get; set; } = null!;
     [Required, EmailAddress, MaxLength(256)] public string Email { get; set; } = null!;
-    [Required, MinLength(6), MaxLength(128)] public string Password { get; set; } = null!;
+    [Required, MinLength(8), MaxLength(128)] public string Password { get; set; } = null!;
     [MaxLength(120)] public string Specialization { get; set; } = null!;
     [MaxLength(1000)] public string? Bio { get; set; }
     [Range(0, 100_000)] public decimal HourlyRate { get; set; }
+    [Range(0, 100_000)] public decimal CommissionPerClient { get; set; }
+    [MaxLength(20)] public string? PaymentModel { get; set; }
+    [MaxLength(40)] public string? TrainerType { get; set; }
 }
 
 public class UpdateTrainerRequest
@@ -247,5 +356,8 @@ public class UpdateTrainerRequest
     public string? Specialization { get; set; }
     public string? Bio { get; set; }
     public decimal? HourlyRate { get; set; }
+    public decimal? CommissionPerClient { get; set; }
+    public string? PaymentModel { get; set; }
+    public string? TrainerType { get; set; }
     public bool? IsAvailable { get; set; }
 }

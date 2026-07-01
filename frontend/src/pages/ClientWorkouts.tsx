@@ -1,3 +1,4 @@
+import { Dumbbell } from 'lucide-react'
 import { useState, useEffect } from 'react'
 import { Button } from '../components/ui/button'
 import { useAuth } from '../contexts/AuthContext'
@@ -67,7 +68,7 @@ export default function ClientWorkouts() {
         {loading ? (
           <p className="py-6 text-center text-sm text-gray-400">Duke ngarkuar…</p>
         ) : plans.length === 0 ? (
-          <EmptyState icon="💪" text="Ende s'ke plan ushtrimesh. Kontakto trajnerin tënd." />
+          <EmptyState icon={<Dumbbell className="h-5 w-5" />} text="Ende s'ke plan ushtrimesh. Kontakto trajnerin tënd." />
         ) : (
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
             {plans.map((plan) => (
@@ -115,7 +116,7 @@ export default function ClientWorkouts() {
               </div>
             </div>
             <Button onClick={() => downloadPDF(selected)} className="w-full bg-coral-500 text-white hover:bg-coral-600">
-              📥 Shkarko PDF
+              Shkarko PDF
             </Button>
           </div>
         </Modal>

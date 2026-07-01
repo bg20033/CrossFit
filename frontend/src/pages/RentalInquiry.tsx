@@ -22,22 +22,23 @@ export default function RentalInquiry() {
     try {
       await api.post('/rentals/inquiry', formData)
       setSubmitted(true)
+      setError('')
       setFormData({ name: '', email: '', phone: '', message: '' })
       setTimeout(() => setSubmitted(false), 5000)
     } catch (err) {
-      setError('Failed to send inquiry. Please try again.')
+      setError('Kërkesa nuk u dërgua. Provo përsëri.')
     }
   }
 
   return (
     <div className="w-full">
       <section className="max-w-2xl mx-auto px-4 py-12">
-        <h1 className="text-4xl font-bold mb-2">Gym Space Rental</h1>
-        <p className="text-gray-600 mb-8">Inquire about renting our facility</p>
+        <h1 className="text-4xl font-bold mb-2">Qira për hapësirë stërvitjeje</h1>
+        <p className="text-gray-600 mb-8">Dërgo kërkesën për orare dhe hapësira të lira.</p>
 
         {submitted && (
           <div className="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded mb-6">
-            Thank you! We'll contact you soon.
+            Kërkesa u dërgua. Stafi do të të kontaktojë së shpejti.
           </div>
         )}
 
@@ -49,7 +50,7 @@ export default function RentalInquiry() {
 
         <form onSubmit={handleSubmit} className="space-y-6">
           <div>
-            <label className="block text-sm font-semibold mb-2">Name</label>
+            <label className="block text-sm font-semibold mb-2">Emri</label>
             <input
               type="text"
               name="name"
@@ -73,7 +74,7 @@ export default function RentalInquiry() {
           </div>
 
           <div>
-            <label className="block text-sm font-semibold mb-2">Phone</label>
+            <label className="block text-sm font-semibold mb-2">Telefoni</label>
             <input
               type="tel"
               name="phone"
@@ -85,7 +86,7 @@ export default function RentalInquiry() {
           </div>
 
           <div>
-            <label className="block text-sm font-semibold mb-2">Message</label>
+            <label className="block text-sm font-semibold mb-2">Mesazhi</label>
             <textarea
               name="message"
               value={formData.message}
@@ -93,11 +94,10 @@ export default function RentalInquiry() {
               required
               rows={5}
               className="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
-              placeholder="Tell us about your rental needs..."
             />
           </div>
 
-          <Button type="submit" size="lg">Send Inquiry</Button>
+          <Button type="submit" size="lg">Dërgo kërkesën</Button>
         </form>
       </section>
     </div>

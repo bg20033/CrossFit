@@ -1,3 +1,4 @@
+import { Banknote, CheckCircle, Plus, Receipt, Users, Wallet } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { useAuth } from '../contexts/AuthContext'
 import api from '../utils/api'
@@ -58,29 +59,29 @@ export default function StaffDashboard() {
     <DashboardShell>
       <DashboardHeader
         badge="Recepsion"
-        title={`Mirë se erdhe, ${user?.name?.split(' ')[0] || 'Staf'} 👔`}
+        title={`Mirë se erdhe, ${user?.name?.split(' ')[0] || 'Staf'}`}
         subtitle="Arka, regjistrimet dhe faturat e ditës."
       />
 
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
         <StatCard
-          icon="🏧"
+          icon={<Banknote className="h-5 w-5" />}
           accent={registerOpen ? 'green' : 'gray'}
           label="Arka"
           value={loading ? '…' : registerOpen ? 'Hapur' : 'Mbyllur'}
           sub={registerOpen && openingBalance !== null ? `Hapur me ${eur(openingBalance)}` : undefined}
         />
-        <StatCard icon="👥" accent="blue" label="Klientë" value={loading ? '…' : clients} />
-        <StatCard icon="🧾" accent="orange" label="Fatura pending" value={loading ? '…' : pending.length} />
-        <StatCard icon="💶" accent="red" label="Borxh total" value={loading ? '…' : eur(pendingTotal)} />
+        <StatCard icon={<Users className="h-5 w-5" />} accent="blue" label="Klientë" value={loading ? '…' : clients} />
+        <StatCard icon={<Receipt className="h-5 w-5" />} accent="orange" label="Fatura pending" value={loading ? '…' : pending.length} />
+        <StatCard icon={<Banknote className="h-5 w-5" />} accent="red" label="Borxh total" value={loading ? '…' : eur(pendingTotal)} />
       </div>
 
       <Panel title="Aksione të shpejta">
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <QuickAction to="/register" icon="➕" label="Regjistro klient" accent="green" />
-          <QuickAction to="/admin/cash-register" icon="🏧" label="Arka" accent="orange" />
-          <QuickAction to="/admin/clients" icon="👥" label="Klientët" accent="blue" />
-          <QuickAction to="/admin/finance" icon="💰" label="Pagesat" accent="teal" />
+          <QuickAction to="/register" icon={<Plus className="h-5 w-5" />} label="Regjistro klient" accent="green" />
+          <QuickAction to="/admin/cash-register" icon={<Banknote className="h-5 w-5" />} label="Arka" accent="orange" />
+          <QuickAction to="/admin/clients" icon={<Users className="h-5 w-5" />} label="Klientët" accent="blue" />
+          <QuickAction to="/admin/finance" icon={<Wallet className="h-5 w-5" />} label="Pagesat" accent="teal" />
         </div>
       </Panel>
 
@@ -88,7 +89,7 @@ export default function StaffDashboard() {
         {loading ? (
           <p className="py-6 text-center text-sm text-gray-400">Duke ngarkuar…</p>
         ) : pending.length === 0 ? (
-          <EmptyState icon="✅" text="S'ka fatura të papaguara." />
+          <EmptyState icon={<CheckCircle className="h-5 w-5" />} text="S'ka fatura të papaguara." />
         ) : (
           <div className="space-y-3">
             {pending.slice(0, 8).map((inv) => (

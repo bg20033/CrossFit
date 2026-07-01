@@ -10,6 +10,7 @@ public class Client
     public string MembershipType { get; set; } = "standard";
     public int? PlanId { get; set; }
     public DateTime? MembershipExpiry { get; set; }
+    public string? QrToken { get; set; } // opaque access token encoded in the member QR
     public bool IsDeleted { get; set; }
     public DateTime? DeletedAt { get; set; }
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;

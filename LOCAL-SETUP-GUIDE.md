@@ -239,13 +239,12 @@ dotnet watch run
 **Expected output:**
 ```
 info: Microsoft.Hosting.Lifetime[14]
-      Now listening on: http://localhost:5000
-      Now listening on: https://localhost:5001
+      Now listening on: http://localhost:5050
 info: Microsoft.Hosting.Lifetime[0]
       Application started. Press Ctrl+C to stop.
 ```
 
-✅ **Backend is running on:** `http://localhost:5000`
+✅ **Backend is running on:** `http://localhost:5050`
 
 ---
 
@@ -258,18 +257,18 @@ cd frontend
 npm run dev
 
 # Or with explicit port
-npm run dev -- --port 3000
+npm run dev -- --port 5180
 ```
 
 **Expected output:**
 ```
   VITE v5.0.0  ready in 234 ms
 
-  ➜  Local:   http://localhost:5173/
+  ➜  Local:   http://localhost:5180/
   ➜  press h to show help
 ```
 
-✅ **Frontend is running on:** `http://localhost:5173`
+✅ **Frontend is running on:** `http://localhost:5180`
 
 ---
 
@@ -278,16 +277,16 @@ npm run dev -- --port 3000
 ### 1. Check Backend Health
 
 ```bash
-curl http://localhost:5000/api/health
+curl http://localhost:5050/health
 
 # Should return 200 OK
 # Or if endpoint doesn't exist, try:
-curl http://localhost:5000/swagger/index.html
+curl http://localhost:5050/swagger/index.html
 ```
 
 ### 2. Test Frontend
 
-Open browser: `http://localhost:5173`
+Open browser: `http://localhost:5180`
 
 Should see:
 - ✅ Landing page loads
@@ -302,10 +301,10 @@ Should see:
 1. Click "Register"
 2. Select role: "Client"
 3. Fill in form:
-   - Name: Test User
-   - Email: test@example.com
-   - Password: Test123!
-   - Phone: 1234567890
+   - Name: Your real test name
+   - Email: your own local email address
+   - Password: a local password
+   - Phone: your local phone number
 4. Click "Register"
 ```
 
@@ -315,8 +314,8 @@ Should see:
 
 ```
 1. Click "Login"
-2. Email: test@example.com
-3. Password: Test123!
+2. Email: the local email address you registered
+3. Password: the local password you chose
 4. Click "Login"
 ```
 
@@ -326,15 +325,14 @@ Should see:
 
 ```bash
 # Register new user
-curl -X POST http://localhost:5000/api/auth/register \
+curl -X POST http://localhost:5050/api/auth/register \
   -H "Content-Type: application/json" \
   -d '{
-    "firstName": "John",
-    "lastName": "Doe",
-    "email": "john@example.com",
-    "password": "Password123!",
-    "phoneNumber": "1234567890",
-    "userType": "Client"
+    "name": "Local Operator",
+    "email": "local.operator@your-domain.test",
+    "password": "choose-a-local-password",
+    "role": "Client",
+    "phone": "044000000"
   }'
 
 # Should return token in response
@@ -356,7 +354,7 @@ SHOW TABLES;
 DESCRIBE Users;
 SELECT * FROM Users;
 
-# View sample data
+# View local records
 SELECT COUNT(*) FROM Users;
 SELECT COUNT(*) FROM Trainers;
 SELECT COUNT(*) FROM Clients;
@@ -495,8 +493,8 @@ npm run dev
 ```
 
 ### Browser
-- Frontend: `http://localhost:5173`
-- Backend API: `http://localhost:5000`
+- Frontend: `http://localhost:5180`
+- Backend API: `http://localhost:5050`
 - Database: `mysql -u fitness_user -p`
 
 ---
@@ -505,15 +503,14 @@ npm run dev
 
 ### Register User
 ```bash
-curl -X POST http://localhost:5000/api/auth/register \
+curl -X POST http://localhost:5050/api/auth/register \
   -H "Content-Type: application/json" \
   -d '{
-    "firstName": "Demo",
-    "lastName": "User",
-    "email": "demo@test.com",
-    "password": "Demo123!",
-    "phoneNumber": "1234567890",
-    "userType": "Trainer"
+    "name": "Local Trainer",
+    "email": "local.trainer@your-domain.test",
+    "password": "choose-a-local-password",
+    "role": "Trainer",
+    "phone": "044000000"
   }'
 
 # Response: { "token": "eyJhbGc...", "user": {...} }
@@ -521,11 +518,11 @@ curl -X POST http://localhost:5000/api/auth/register \
 
 ### Login User
 ```bash
-curl -X POST http://localhost:5000/api/auth/login \
+curl -X POST http://localhost:5050/api/auth/login \
   -H "Content-Type: application/json" \
   -d '{
-    "email": "demo@test.com",
-    "password": "Demo123!"
+    "email": "local.trainer@your-domain.test",
+    "password": "choose-a-local-password"
   }'
 
 # Response: { "token": "eyJhbGc...", "user": {...} }
@@ -535,7 +532,7 @@ curl -X POST http://localhost:5000/api/auth/login \
 ```bash
 TOKEN="eyJhbGc..." # From login response
 
-curl -X GET http://localhost:5000/api/clients \
+curl -X GET http://localhost:5050/api/clients \
   -H "Authorization: Bearer $TOKEN"
 ```
 
@@ -546,12 +543,12 @@ curl -X GET http://localhost:5000/api/clients \
 ### Checklist
 
 - [ ] MySQL running: `mysql -u fitness_user -p`
-- [ ] Backend running: `http://localhost:5000` (terminal shows "listening")
-- [ ] Frontend running: `http://localhost:5173` (page loads)
+- [ ] Backend running: `http://localhost:5050` (terminal shows "listening")
+- [ ] Frontend running: `http://localhost:5180` (page loads)
 - [ ] Database tables created: `SHOW TABLES;` shows ~18 tables
 - [ ] Can register new user: Form submits successfully
 - [ ] Can login: Redirects to dashboard
-- [ ] API responds to curl: `curl http://localhost:5000/api/health`
+- [ ] API responds to curl: `curl http://localhost:5050/health`
 
 ---
 
@@ -560,13 +557,13 @@ curl -X GET http://localhost:5000/api/clients \
 ```
 Local environment is ready!
 
-Frontend:  http://localhost:5173
-Backend:   http://localhost:5000
+Frontend:  http://localhost:5180
+Backend:   http://localhost:5050
 Database:  standup_fitness (MySQL)
 
 Next Steps:
 1. Test all 4 roles (Client, Trainer, Admin, Staff)
-2. Create sample data
+2. Create real local records for the roles you want to test
 3. Test workout plan creation
 4. Test PDF export
 5. Test file uploads
@@ -589,10 +586,10 @@ git commit -m "Initial local setup complete"
 
 | Service | URL/Command | Status Check |
 |---------|-------------|--------------|
-| **Frontend** | http://localhost:5173 | npm run dev |
-| **Backend** | http://localhost:5000 | dotnet run |
+| **Frontend** | http://localhost:5180 | npm run dev |
+| **Backend** | http://localhost:5050 | dotnet run |
 | **Database** | localhost:3306 | mysql -u fitness_user -p |
-| **API Docs** | http://localhost:5000/swagger | Swagger UI |
+| **API Docs** | http://localhost:5050/swagger | Swagger UI |
 
 ---
 

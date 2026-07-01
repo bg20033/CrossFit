@@ -1,7 +1,9 @@
+import { ArrowDownRight, ArrowUpRight, Receipt, Sigma } from 'lucide-react'
 import { useState, useEffect } from 'react'
 import { Button } from '../components/ui/button'
 import { useNotification } from '../contexts/NotificationContext'
 import api from '../utils/api'
+import { toDecimal } from '../utils/number'
 import { eur, shortDate } from '../utils/format'
 import {
   DashboardShell,
@@ -113,7 +115,7 @@ export default function AdminFinance() {
     try {
       await api.post('/finance/add-transaction', {
         ...form,
-        amount: parseFloat(form.amount),
+        amount: toDecimal(form.amount),
         categoryId: form.categoryId ? parseInt(form.categoryId) : null,
       })
       setShowForm(false)
@@ -168,9 +170,9 @@ export default function AdminFinance() {
       />
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-        <StatCard icon="↗" accent="green" label="Të hyrat" value={eur(summary.totalIncome)} />
-        <StatCard icon="↘" accent="red" label="Shpenzimet" value={eur(summary.totalExpenses)} />
-        <StatCard icon="∑" accent={summary.balance >= 0 ? 'blue' : 'red'} label="Bilanci" value={eur(summary.balance)} />
+        <StatCard icon={<ArrowUpRight className="h-5 w-5" />} accent="green" label="Të hyrat" value={eur(summary.totalIncome)} />
+        <StatCard icon={<ArrowDownRight className="h-5 w-5" />} accent="red" label="Shpenzimet" value={eur(summary.totalExpenses)} />
+        <StatCard icon={<Sigma className="h-5 w-5" />} accent={summary.balance >= 0 ? 'blue' : 'red'} label="Bilanci" value={eur(summary.balance)} />
       </div>
 
       <Panel
@@ -251,7 +253,7 @@ export default function AdminFinance() {
                 </select>
               </Field>
               <Field label="Shuma (€)">
-                <input type="number" step="0.01" name="amount" value={form.amount} onChange={change} required className={fieldCls} />
+                <input type="text" inputMode="decimal" name="amount" value={form.amount} onChange={change} required className={fieldCls} />
               </Field>
               <Field label="Përshkrimi">
                 <input name="description" value={form.description} onChange={change} required className={fieldCls} />
@@ -314,7 +316,7 @@ export default function AdminFinance() {
                 key={f.key}
                 onClick={() => setFilter(f.key)}
                 className={`rounded-md px-3 py-1.5 text-xs font-semibold transition ${
-                  filter === f.key ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'
+                  filter === f.key ? 'bg-white text-gray-900' : 'text-gray-500 hover:text-gray-700'
                 }`}
               >
                 {f.label}
@@ -326,7 +328,7 @@ export default function AdminFinance() {
         {loading ? (
           <p className="py-6 text-center text-sm text-gray-400">Duke ngarkuar…</p>
         ) : transactions.length === 0 ? (
-          <EmptyState icon="🧾" text="Ende s'ka transaksione. Shto të parin me '+ Transaksion'." />
+          <EmptyState icon={<Receipt className="h-5 w-5" />} text="Ende s'ka transaksione. Shto të parin me '+ Transaksion'." />
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">

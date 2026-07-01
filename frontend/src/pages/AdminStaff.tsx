@@ -1,7 +1,9 @@
+import { User } from 'lucide-react'
 import { useState, useEffect } from 'react'
 import { Button } from '../components/ui/button'
 import { useNotification } from '../contexts/NotificationContext'
 import api from '../utils/api'
+import { toDecimal } from '../utils/number'
 import { eur, shortDate } from '../utils/format'
 import {
   DashboardShell,
@@ -60,7 +62,7 @@ export default function AdminStaff() {
     e.preventDefault()
     setError('')
     try {
-      await api.post('/staff/create', { ...form, salary: parseFloat(form.salary) })
+      await api.post('/staff/create', { ...form, salary: toDecimal(form.salary) })
       setShowForm(false)
       setForm(emptyStaff)
       addNotification('Sukses', 'Anëtari i stafit u krijua.', 'success')
@@ -78,9 +80,9 @@ export default function AdminStaff() {
       const res = await api.post(`/staff/${salaryFor.id}/calculate-salary`, {
         year: parseInt(salary.year),
         month: parseInt(salary.month),
-        hoursWorked: parseFloat(salary.hoursWorked),
-        bonus: parseFloat(salary.bonus),
-        deductions: parseFloat(salary.deductions),
+        hoursWorked: toDecimal(salary.hoursWorked),
+        bonus: toDecimal(salary.bonus),
+        deductions: toDecimal(salary.deductions),
       })
       const total = res.data?.total ?? res.data?.totalSalary ?? res.data?.netSalary
       setSalaryResult(total != null ? `Rroga e llogaritur: ${eur(total)}` : 'Rroga u llogarit.')
@@ -115,9 +117,9 @@ export default function AdminStaff() {
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <Field label="Emri"><input name="name" value={form.name} onChange={change} required className={fieldCls} /></Field>
               <Field label="Email"><input type="email" name="email" value={form.email} onChange={change} required className={fieldCls} /></Field>
-              <Field label="Fjalëkalimi"><input type="password" name="password" value={form.password} onChange={change} required className={fieldCls} /></Field>
+              <Field label="Fjalëkalimi"><input type="password" name="password" value={form.password} onChange={change} required minLength={8} className={fieldCls} /></Field>
               <Field label="Pozicioni"><input name="position" value={form.position} onChange={change} required placeholder="p.sh. Recepsionist" className={fieldCls} /></Field>
-              <Field label="Rroga bazë (€)"><input type="number" step="0.01" name="salary" value={form.salary} onChange={change} className={fieldCls} /></Field>
+              <Field label="Rroga bazë (€)"><input type="text" inputMode="decimal" name="salary" value={form.salary} onChange={change} className={fieldCls} /></Field>
             </div>
             <Button type="submit" className={primaryBtn}>Krijo</Button>
           </form>
@@ -128,7 +130,7 @@ export default function AdminStaff() {
         {loading ? (
           <p className="py-6 text-center text-sm text-gray-400">Duke ngarkuar…</p>
         ) : staff.length === 0 ? (
-          <EmptyState icon="👔" text="Ende s'ka staf. Shto të parin me '+ Anëtar i ri'." />
+          <EmptyState icon={<User className="h-5 w-5" />} text="Ende s'ka staf. Shto të parin me '+ Anëtar i ri'." />
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">

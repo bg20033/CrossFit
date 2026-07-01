@@ -39,6 +39,11 @@ public class InvoiceItem
     public decimal UnitPrice { get; set; }
     public decimal Total { get; set; }
 
+    // Optional: when a membership line is tied to a group, paying the invoice
+    // auto-enrolls the client into this group (GAP-7: package → group link).
+    public int? GroupId { get; set; }
+    public TrainingGroup? Group { get; set; }
+
     // Navigation
     public Invoice Invoice { get; set; } = null!;
 }

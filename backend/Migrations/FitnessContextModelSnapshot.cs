@@ -16,7 +16,7 @@ namespace StandUpFitness.Migrations
         {
 #pragma warning disable 612, 618
             modelBuilder
-                .HasAnnotation("ProductVersion", "8.0.0")
+                .HasAnnotation("ProductVersion", "8.0.28")
                 .HasAnnotation("Relational:MaxIdentifierLength", 64);
 
             modelBuilder.Entity("ClientTrainingGroups", b =>
@@ -86,8 +86,21 @@ namespace StandUpFitness.Migrations
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("datetime(6)");
 
+                    b.Property<string>("Decision")
+                        .IsRequired()
+                        .HasColumnType("longtext");
+
+                    b.Property<string>("DenyReason")
+                        .HasColumnType("longtext");
+
+                    b.Property<int?>("GroupId")
+                        .HasColumnType("int");
+
                     b.Property<string>("Notes")
                         .HasColumnType("longtext");
+
+                    b.Property<int?>("ScannedById")
+                        .HasColumnType("int");
 
                     b.HasKey("Id");
 
@@ -137,7 +150,8 @@ namespace StandUpFitness.Migrations
                         .HasColumnType("datetime(6)");
 
                     b.Property<decimal>("ClosingBalance")
-                        .HasColumnType("decimal(65,30)");
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)");
 
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("datetime(6)");
@@ -149,7 +163,8 @@ namespace StandUpFitness.Migrations
                         .HasColumnType("datetime(6)");
 
                     b.Property<decimal>("OpeningBalance")
-                        .HasColumnType("decimal(65,30)");
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)");
 
                     b.Property<int>("StaffId")
                         .HasColumnType("int");
@@ -159,16 +174,56 @@ namespace StandUpFitness.Migrations
                         .HasColumnType("longtext");
 
                     b.Property<decimal>("TotalExpense")
-                        .HasColumnType("decimal(65,30)");
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)");
 
                     b.Property<decimal>("TotalIncome")
-                        .HasColumnType("decimal(65,30)");
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)");
 
                     b.HasKey("Id");
 
                     b.HasIndex("StaffId");
 
                     b.ToTable("CashRegisters");
+                });
+
+            modelBuilder.Entity("StandUpFitness.Models.ClassSession", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    b.Property<int>("Capacity")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<int>("Day")
+                        .HasColumnType("int");
+
+                    b.Property<int>("DurationMin")
+                        .HasColumnType("int");
+
+                    b.Property<string>("Room")
+                        .IsRequired()
+                        .HasColumnType("longtext");
+
+                    b.Property<int>("StartMin")
+                        .HasColumnType("int");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasColumnType("longtext");
+
+                    b.Property<string>("Trainer")
+                        .IsRequired()
+                        .HasColumnType("longtext");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("ClassSessions");
                 });
 
             modelBuilder.Entity("StandUpFitness.Models.Client", b =>
@@ -199,6 +254,9 @@ namespace StandUpFitness.Migrations
                     b.Property<int?>("PlanId")
                         .HasColumnType("int");
 
+                    b.Property<string>("QrToken")
+                        .HasColumnType("varchar(255)");
+
                     b.Property<DateTime>("StartDate")
                         .HasColumnType("datetime(6)");
 
@@ -214,6 +272,8 @@ namespace StandUpFitness.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("PlanId");
+
+                    b.HasIndex("QrToken");
 
                     b.HasIndex("TrainerId");
 
@@ -270,6 +330,78 @@ namespace StandUpFitness.Migrations
                     b.ToTable("DietPlans");
                 });
 
+            modelBuilder.Entity("StandUpFitness.Models.DirectMessage", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    b.Property<string>("Body")
+                        .IsRequired()
+                        .HasMaxLength(4000)
+                        .HasColumnType("varchar(4000)");
+
+                    b.Property<DateTime?>("ReadAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<int>("ReceiverUserId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("SenderUserId")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("SentAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ReceiverUserId");
+
+                    b.HasIndex("SenderUserId", "ReceiverUserId", "SentAt");
+
+                    b.ToTable("DirectMessages");
+                });
+
+            modelBuilder.Entity("StandUpFitness.Models.DynamicRole", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<string>("Description")
+                        .IsRequired()
+                        .HasColumnType("longtext");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("tinyint(1)");
+
+                    b.Property<bool>("IsSystem")
+                        .HasColumnType("tinyint(1)");
+
+                    b.Property<string>("Key")
+                        .IsRequired()
+                        .HasMaxLength(80)
+                        .HasColumnType("varchar(80)");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(120)
+                        .HasColumnType("varchar(120)");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Key")
+                        .IsUnique();
+
+                    b.ToTable("DynamicRoles");
+                });
+
             modelBuilder.Entity("StandUpFitness.Models.Expense", b =>
                 {
                     b.Property<int>("Id")
@@ -277,7 +409,8 @@ namespace StandUpFitness.Migrations
                         .HasColumnType("int");
 
                     b.Property<decimal>("Amount")
-                        .HasColumnType("decimal(65,30)");
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)");
 
                     b.Property<int?>("ApprovedById")
                         .HasColumnType("int");
@@ -321,7 +454,8 @@ namespace StandUpFitness.Migrations
                         .HasColumnType("int");
 
                     b.Property<decimal>("Amount")
-                        .HasColumnType("decimal(65,30)");
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)");
 
                     b.Property<int?>("CashRegisterId")
                         .HasColumnType("int");
@@ -413,6 +547,51 @@ namespace StandUpFitness.Migrations
                     b.ToTable("FinanceCategories");
                 });
 
+            modelBuilder.Entity("StandUpFitness.Models.FoodLogEntry", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    b.Property<decimal>("Carbs")
+                        .HasPrecision(8, 2)
+                        .HasColumnType("decimal(8,2)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<DateTime>("Date")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<decimal>("Fat")
+                        .HasPrecision(8, 2)
+                        .HasColumnType("decimal(8,2)");
+
+                    b.Property<int>("Kcal")
+                        .HasColumnType("int");
+
+                    b.Property<string>("Meal")
+                        .IsRequired()
+                        .HasColumnType("longtext");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("longtext");
+
+                    b.Property<decimal>("Protein")
+                        .HasPrecision(8, 2)
+                        .HasColumnType("decimal(8,2)");
+
+                    b.Property<int>("UserId")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UserId", "Date");
+
+                    b.ToTable("FoodLogEntries");
+                });
+
             modelBuilder.Entity("StandUpFitness.Models.Goal", b =>
                 {
                     b.Property<int>("Id")
@@ -436,11 +615,19 @@ namespace StandUpFitness.Migrations
                     b.Property<DateTime>("TargetDate")
                         .HasColumnType("datetime(6)");
 
+                    b.Property<decimal?>("TargetValue")
+                        .HasPrecision(8, 2)
+                        .HasColumnType("decimal(8,2)");
+
                     b.Property<string>("Title")
                         .IsRequired()
                         .HasColumnType("longtext");
 
                     b.Property<string>("Type")
+                        .IsRequired()
+                        .HasColumnType("longtext");
+
+                    b.Property<string>("Unit")
                         .IsRequired()
                         .HasColumnType("longtext");
 
@@ -452,6 +639,175 @@ namespace StandUpFitness.Migrations
                     b.HasIndex("ClientId");
 
                     b.ToTable("Goals");
+                });
+
+            modelBuilder.Entity("StandUpFitness.Models.GroupScheduleSlot", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    b.Property<string>("DayOfWeek")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("varchar(20)");
+
+                    b.Property<int>("EndMin")
+                        .HasColumnType("int");
+
+                    b.Property<int>("StartMin")
+                        .HasColumnType("int");
+
+                    b.Property<int>("TrainingGroupId")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TrainingGroupId", "DayOfWeek", "StartMin");
+
+                    b.ToTable("GroupScheduleSlots");
+                });
+
+            modelBuilder.Entity("StandUpFitness.Models.GroupSession", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<DateTime>("Date")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<string>("DayOfWeek")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("varchar(20)");
+
+                    b.Property<int>("EndMin")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime?>("PostponedToDate")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<string>("Reason")
+                        .HasColumnType("longtext");
+
+                    b.Property<int>("StartMin")
+                        .HasColumnType("int");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("varchar(20)");
+
+                    b.Property<int?>("SubstituteTrainerId")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime?>("TrainerCheckInTime")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<bool>("TrainerCheckedIn")
+                        .HasColumnType("tinyint(1)");
+
+                    b.Property<int>("TrainingGroupId")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("SubstituteTrainerId");
+
+                    b.HasIndex("TrainingGroupId", "Date");
+
+                    b.ToTable("GroupSessions");
+                });
+
+            modelBuilder.Entity("StandUpFitness.Models.GroupWaitlistEntry", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    b.Property<int>("ClientId")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime?>("PromotedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<DateTime>("RequestedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasColumnType("varchar(255)");
+
+                    b.Property<int>("TrainingGroupId")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ClientId");
+
+                    b.HasIndex("TrainingGroupId", "ClientId", "Status");
+
+                    b.ToTable("GroupWaitlistEntries");
+                });
+
+            modelBuilder.Entity("StandUpFitness.Models.GymNotice", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<int>("CreatedByUserId")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime?>("EndsAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("tinyint(1)");
+
+                    b.Property<string>("Message")
+                        .IsRequired()
+                        .HasMaxLength(2000)
+                        .HasColumnType("varchar(2000)");
+
+                    b.Property<DateTime>("StartsAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<string>("TargetAudience")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("varchar(40)");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasMaxLength(160)
+                        .HasColumnType("varchar(160)");
+
+                    b.Property<string>("Type")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("varchar(40)");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CreatedByUserId");
+
+                    b.HasIndex("IsActive", "StartsAt", "EndsAt");
+
+                    b.ToTable("GymNotices");
                 });
 
             modelBuilder.Entity("StandUpFitness.Models.GymOwner", b =>
@@ -489,6 +845,48 @@ namespace StandUpFitness.Migrations
                     b.HasIndex("UserId");
 
                     b.ToTable("GymOwners");
+                });
+
+            modelBuilder.Entity("StandUpFitness.Models.GymSettings", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    b.Property<string>("BrandColor")
+                        .IsRequired()
+                        .HasColumnType("longtext");
+
+                    b.Property<string>("BrandName")
+                        .IsRequired()
+                        .HasColumnType("longtext");
+
+                    b.Property<string>("CloseTime")
+                        .IsRequired()
+                        .HasColumnType("longtext");
+
+                    b.Property<string>("ClosedDays")
+                        .IsRequired()
+                        .HasColumnType("longtext");
+
+                    b.Property<string>("HolidayDates")
+                        .IsRequired()
+                        .HasColumnType("longtext");
+
+                    b.Property<string>("OpenTime")
+                        .IsRequired()
+                        .HasColumnType("longtext");
+
+                    b.Property<decimal>("RefundThreshold")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("GymSettings");
                 });
 
             modelBuilder.Entity("StandUpFitness.Models.Invoice", b =>
@@ -547,13 +945,16 @@ namespace StandUpFitness.Migrations
                         .HasColumnType("varchar(255)");
 
                     b.Property<decimal>("Subtotal")
-                        .HasColumnType("decimal(65,30)");
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)");
 
                     b.Property<decimal>("TaxAmount")
-                        .HasColumnType("decimal(65,30)");
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)");
 
                     b.Property<decimal>("TotalAmount")
-                        .HasColumnType("decimal(65,30)");
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)");
 
                     b.Property<DateTime>("UpdatedAt")
                         .HasColumnType("datetime(6)");
@@ -586,6 +987,9 @@ namespace StandUpFitness.Migrations
                         .IsRequired()
                         .HasColumnType("longtext");
 
+                    b.Property<int?>("GroupId")
+                        .HasColumnType("int");
+
                     b.Property<int>("InvoiceId")
                         .HasColumnType("int");
 
@@ -593,10 +997,12 @@ namespace StandUpFitness.Migrations
                         .HasColumnType("int");
 
                     b.Property<decimal>("Total")
-                        .HasColumnType("decimal(65,30)");
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)");
 
                     b.Property<decimal>("UnitPrice")
-                        .HasColumnType("decimal(65,30)");
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)");
 
                     b.HasKey("Id");
 
@@ -624,22 +1030,232 @@ namespace StandUpFitness.Migrations
                     b.Property<int>("DurationDays")
                         .HasColumnType("int");
 
+                    b.Property<int>("GraceDays")
+                        .HasColumnType("int");
+
                     b.Property<bool>("IsActive")
                         .HasColumnType("tinyint(1)");
 
                     b.Property<bool>("IsDeleted")
                         .HasColumnType("tinyint(1)");
 
+                    b.Property<int>("MaxSharedMembers")
+                        .HasColumnType("int");
+
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasColumnType("longtext");
 
+                    b.Property<string>("PlanType")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("varchar(40)");
+
                     b.Property<decimal>("Price")
-                        .HasColumnType("decimal(65,30)");
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<int>("SessionsTotal")
+                        .HasColumnType("int");
 
                     b.HasKey("Id");
 
                     b.ToTable("MembershipPlans");
+                });
+
+            modelBuilder.Entity("StandUpFitness.Models.NutritionProfile", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    b.Property<string>("Activity")
+                        .IsRequired()
+                        .HasColumnType("longtext");
+
+                    b.Property<int>("Age")
+                        .HasColumnType("int");
+
+                    b.Property<int>("Bmr")
+                        .HasColumnType("int");
+
+                    b.Property<int>("CarbsG")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<int>("FatG")
+                        .HasColumnType("int");
+
+                    b.Property<string>("Gender")
+                        .IsRequired()
+                        .HasColumnType("longtext");
+
+                    b.Property<string>("Goal")
+                        .IsRequired()
+                        .HasColumnType("longtext");
+
+                    b.Property<double>("HeightCm")
+                        .HasColumnType("double");
+
+                    b.Property<int>("ProteinG")
+                        .HasColumnType("int");
+
+                    b.Property<int>("TargetCalories")
+                        .HasColumnType("int");
+
+                    b.Property<int>("Tdee")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<int>("UserId")
+                        .HasColumnType("int");
+
+                    b.Property<double>("WeightKg")
+                        .HasColumnType("double");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UserId")
+                        .IsUnique();
+
+                    b.ToTable("NutritionProfiles");
+                });
+
+            modelBuilder.Entity("StandUpFitness.Models.PaymentTransaction", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    b.Property<decimal>("Amount")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<int?>("ClientId")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<string>("Currency")
+                        .IsRequired()
+                        .HasColumnType("longtext");
+
+                    b.Property<string>("IdempotencyKey")
+                        .HasColumnType("varchar(255)");
+
+                    b.Property<int?>("InvoiceId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("Method")
+                        .IsRequired()
+                        .HasColumnType("longtext");
+
+                    b.Property<string>("Provider")
+                        .IsRequired()
+                        .HasColumnType("longtext");
+
+                    b.Property<string>("ProviderReference")
+                        .HasColumnType("longtext");
+
+                    b.Property<string>("ReceiptHtml")
+                        .HasColumnType("longtext");
+
+                    b.Property<string>("ReceiptNumber")
+                        .HasColumnType("varchar(255)");
+
+                    b.Property<int?>("StaffId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasColumnType("longtext");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ClientId");
+
+                    b.HasIndex("IdempotencyKey");
+
+                    b.HasIndex("InvoiceId");
+
+                    b.HasIndex("ReceiptNumber")
+                        .IsUnique();
+
+                    b.HasIndex("StaffId");
+
+                    b.ToTable("PaymentTransactions");
+                });
+
+            modelBuilder.Entity("StandUpFitness.Models.Permission", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<string>("Description")
+                        .IsRequired()
+                        .HasColumnType("longtext");
+
+                    b.Property<string>("Key")
+                        .IsRequired()
+                        .HasMaxLength(120)
+                        .HasColumnType("varchar(120)");
+
+                    b.Property<string>("Module")
+                        .IsRequired()
+                        .HasMaxLength(80)
+                        .HasColumnType("varchar(80)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Key")
+                        .IsUnique();
+
+                    b.ToTable("Permissions");
+                });
+
+            modelBuilder.Entity("StandUpFitness.Models.PersonalRecord", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    b.Property<string>("Benchmark")
+                        .IsRequired()
+                        .HasColumnType("longtext");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<DateTime>("Date")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<string>("Note")
+                        .HasColumnType("longtext");
+
+                    b.Property<int>("UserId")
+                        .HasColumnType("int");
+
+                    b.Property<decimal>("Value")
+                        .HasPrecision(10, 2)
+                        .HasColumnType("decimal(10,2)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UserId");
+
+                    b.ToTable("PersonalRecords");
                 });
 
             modelBuilder.Entity("StandUpFitness.Models.PersonalSession", b =>
@@ -652,7 +1268,8 @@ namespace StandUpFitness.Migrations
                         .HasColumnType("int");
 
                     b.Property<decimal>("Cost")
-                        .HasColumnType("decimal(65,30)");
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)");
 
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("datetime(6)");
@@ -691,8 +1308,25 @@ namespace StandUpFitness.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("int");
 
+                    b.Property<decimal?>("Arms")
+                        .HasPrecision(8, 2)
+                        .HasColumnType("decimal(8,2)");
+
+                    b.Property<decimal?>("Back")
+                        .HasPrecision(8, 2)
+                        .HasColumnType("decimal(8,2)");
+
+                    b.Property<decimal?>("BodyFat")
+                        .HasPrecision(8, 2)
+                        .HasColumnType("decimal(8,2)");
+
+                    b.Property<decimal?>("Calves")
+                        .HasPrecision(8, 2)
+                        .HasColumnType("decimal(8,2)");
+
                     b.Property<decimal?>("Chest")
-                        .HasColumnType("decimal(65,30)");
+                        .HasPrecision(8, 2)
+                        .HasColumnType("decimal(8,2)");
 
                     b.Property<int>("ClientId")
                         .HasColumnType("int");
@@ -704,23 +1338,98 @@ namespace StandUpFitness.Migrations
                         .HasColumnType("datetime(6)");
 
                     b.Property<decimal?>("Hips")
-                        .HasColumnType("decimal(65,30)");
+                        .HasPrecision(8, 2)
+                        .HasColumnType("decimal(8,2)");
 
                     b.Property<string>("Notes")
                         .IsRequired()
                         .HasColumnType("longtext");
 
+                    b.Property<decimal?>("Shoulders")
+                        .HasPrecision(8, 2)
+                        .HasColumnType("decimal(8,2)");
+
+                    b.Property<decimal?>("Thighs")
+                        .HasPrecision(8, 2)
+                        .HasColumnType("decimal(8,2)");
+
                     b.Property<decimal?>("Waist")
-                        .HasColumnType("decimal(65,30)");
+                        .HasPrecision(8, 2)
+                        .HasColumnType("decimal(8,2)");
 
                     b.Property<decimal>("Weight")
-                        .HasColumnType("decimal(65,30)");
+                        .HasPrecision(8, 2)
+                        .HasColumnType("decimal(8,2)");
 
                     b.HasKey("Id");
 
                     b.HasIndex("ClientId");
 
                     b.ToTable("ProgressLogs");
+                });
+
+            modelBuilder.Entity("StandUpFitness.Models.ProgressPhoto", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    b.Property<int>("ClientId")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<string>("DataUrl")
+                        .IsRequired()
+                        .HasColumnType("longtext");
+
+                    b.Property<DateTime>("Date")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<string>("Pose")
+                        .IsRequired()
+                        .HasColumnType("longtext");
+
+                    b.Property<decimal?>("Weight")
+                        .HasPrecision(8, 2)
+                        .HasColumnType("decimal(8,2)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ClientId");
+
+                    b.ToTable("ProgressPhotos");
+                });
+
+            modelBuilder.Entity("StandUpFitness.Models.Recipe", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<string>("ItemsJson")
+                        .IsRequired()
+                        .HasColumnType("longtext");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("longtext");
+
+                    b.Property<int>("Servings")
+                        .HasColumnType("int");
+
+                    b.Property<int>("UserId")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UserId");
+
+                    b.ToTable("Recipes");
                 });
 
             modelBuilder.Entity("StandUpFitness.Models.RefreshToken", b =>
@@ -790,6 +1499,141 @@ namespace StandUpFitness.Migrations
                     b.ToTable("RentalInquiries");
                 });
 
+            modelBuilder.Entity("StandUpFitness.Models.RentalInvoice", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    b.Property<decimal>("Amount")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<DateTime>("DueDate")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<string>("InvoiceNumber")
+                        .IsRequired()
+                        .HasColumnType("longtext");
+
+                    b.Property<DateTime?>("PaidAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<DateTime>("PeriodEnd")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<DateTime>("PeriodStart")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasColumnType("longtext");
+
+                    b.Property<int>("TrainerTenantId")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TrainerTenantId");
+
+                    b.ToTable("RentalInvoices");
+                });
+
+            modelBuilder.Entity("StandUpFitness.Models.RentalScheduleSlot", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    b.Property<string>("DayOfWeek")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("varchar(20)");
+
+                    b.Property<int>("EndMin")
+                        .HasColumnType("int");
+
+                    b.Property<int>("StartMin")
+                        .HasColumnType("int");
+
+                    b.Property<int>("TrainerTenantId")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TrainerTenantId", "DayOfWeek", "StartMin");
+
+                    b.ToTable("RentalScheduleSlots");
+                });
+
+            modelBuilder.Entity("StandUpFitness.Models.RentalSession", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<DateTime>("Date")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<string>("DayOfWeek")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("varchar(20)");
+
+                    b.Property<int>("EndMin")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime?>("PostponedToDate")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<string>("Reason")
+                        .HasColumnType("longtext");
+
+                    b.Property<int>("StartMin")
+                        .HasColumnType("int");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("varchar(20)");
+
+                    b.Property<int>("TrainerTenantId")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TrainerTenantId", "Date");
+
+                    b.ToTable("RentalSessions");
+                });
+
+            modelBuilder.Entity("StandUpFitness.Models.RolePermission", b =>
+                {
+                    b.Property<int>("DynamicRoleId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("PermissionId")
+                        .HasColumnType("int");
+
+                    b.HasKey("DynamicRoleId", "PermissionId");
+
+                    b.HasIndex("PermissionId");
+
+                    b.ToTable("RolePermissions");
+                });
+
             modelBuilder.Entity("StandUpFitness.Models.Salary", b =>
                 {
                     b.Property<int>("Id")
@@ -797,22 +1641,27 @@ namespace StandUpFitness.Migrations
                         .HasColumnType("int");
 
                     b.Property<decimal>("BaseSalary")
-                        .HasColumnType("decimal(65,30)");
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)");
 
                     b.Property<decimal>("Bonus")
-                        .HasColumnType("decimal(65,30)");
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)");
 
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("datetime(6)");
 
                     b.Property<decimal>("Deductions")
-                        .HasColumnType("decimal(65,30)");
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)");
 
                     b.Property<decimal>("HourlyRate")
-                        .HasColumnType("decimal(65,30)");
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)");
 
                     b.Property<decimal>("HoursWorked")
-                        .HasColumnType("decimal(65,30)");
+                        .HasPrecision(8, 2)
+                        .HasColumnType("decimal(8,2)");
 
                     b.Property<int>("Month")
                         .HasColumnType("int");
@@ -821,10 +1670,12 @@ namespace StandUpFitness.Migrations
                         .HasColumnType("longtext");
 
                     b.Property<decimal>("OvertimeHours")
-                        .HasColumnType("decimal(65,30)");
+                        .HasPrecision(8, 2)
+                        .HasColumnType("decimal(8,2)");
 
                     b.Property<decimal>("OvertimeMultiplier")
-                        .HasColumnType("decimal(65,30)");
+                        .HasPrecision(5, 2)
+                        .HasColumnType("decimal(5,2)");
 
                     b.Property<DateTime?>("PaidDate")
                         .HasColumnType("datetime(6)");
@@ -837,7 +1688,8 @@ namespace StandUpFitness.Migrations
                         .HasColumnType("longtext");
 
                     b.Property<decimal>("TotalAmount")
-                        .HasColumnType("decimal(65,30)");
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)");
 
                     b.Property<int>("Year")
                         .HasColumnType("int");
@@ -848,6 +1700,32 @@ namespace StandUpFitness.Migrations
                         .IsUnique();
 
                     b.ToTable("Salaries");
+                });
+
+            modelBuilder.Entity("StandUpFitness.Models.ShoppingItem", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    b.Property<bool>("Checked")
+                        .HasColumnType("tinyint(1)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("longtext");
+
+                    b.Property<int>("UserId")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UserId");
+
+                    b.ToTable("ShoppingItems");
                 });
 
             modelBuilder.Entity("StandUpFitness.Models.Staff", b =>
@@ -873,7 +1751,8 @@ namespace StandUpFitness.Migrations
                         .HasColumnType("longtext");
 
                     b.Property<decimal>("Salary")
-                        .HasColumnType("decimal(65,30)");
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)");
 
                     b.Property<DateTime?>("TerminationDate")
                         .HasColumnType("datetime(6)");
@@ -893,6 +1772,56 @@ namespace StandUpFitness.Migrations
                     b.ToTable("Staff");
                 });
 
+            modelBuilder.Entity("StandUpFitness.Models.TenantClient", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<string>("Email")
+                        .IsRequired()
+                        .HasColumnType("longtext");
+
+                    b.Property<string>("Goal")
+                        .IsRequired()
+                        .HasColumnType("longtext");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("tinyint(1)");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("longtext");
+
+                    b.Property<string>("Notes")
+                        .IsRequired()
+                        .HasColumnType("longtext");
+
+                    b.Property<string>("Phone")
+                        .IsRequired()
+                        .HasColumnType("longtext");
+
+                    b.Property<int>("TrainerTenantId")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<int?>("UserId")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TrainerTenantId");
+
+                    b.HasIndex("UserId");
+
+                    b.ToTable("TenantClients");
+                });
+
             modelBuilder.Entity("StandUpFitness.Models.Trainer", b =>
                 {
                     b.Property<int>("Id")
@@ -903,18 +1832,33 @@ namespace StandUpFitness.Migrations
                         .IsRequired()
                         .HasColumnType("longtext");
 
+                    b.Property<decimal>("CommissionPerClient")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)");
+
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("datetime(6)");
 
                     b.Property<decimal>("HourlyRate")
-                        .HasColumnType("decimal(65,30)");
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)");
 
                     b.Property<bool>("IsAvailable")
                         .HasColumnType("tinyint(1)");
 
+                    b.Property<string>("PaymentModel")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("varchar(20)");
+
                     b.Property<string>("Specialization")
                         .IsRequired()
                         .HasColumnType("longtext");
+
+                    b.Property<string>("TrainerType")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("varchar(40)");
 
                     b.Property<DateTime>("UpdatedAt")
                         .HasColumnType("datetime(6)");
@@ -927,6 +1871,188 @@ namespace StandUpFitness.Migrations
                     b.HasIndex("UserId");
 
                     b.ToTable("Trainers");
+                });
+
+            modelBuilder.Entity("StandUpFitness.Models.TrainerCommission", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    b.Property<decimal>("Bonus")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<int>("ClientCount")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<decimal>("Deductions")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<int?>("FinanceId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("Month")
+                        .HasColumnType("int");
+
+                    b.Property<string>("Notes")
+                        .HasColumnType("longtext");
+
+                    b.Property<DateTime?>("PaidDate")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<string>("PaymentModel")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("varchar(20)");
+
+                    b.Property<decimal>("ProratedAmount")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<decimal>("RatePerClient")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<int>("SessionsCancelled")
+                        .HasColumnType("int");
+
+                    b.Property<int>("SessionsHeld")
+                        .HasColumnType("int");
+
+                    b.Property<int>("SessionsPlanned")
+                        .HasColumnType("int");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("varchar(20)");
+
+                    b.Property<decimal>("TotalAmount")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<int>("TrainerId")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<int>("Year")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("FinanceId");
+
+                    b.HasIndex("TrainerId", "Year", "Month");
+
+                    b.ToTable("TrainerCommissions");
+                });
+
+            modelBuilder.Entity("StandUpFitness.Models.TrainerTenant", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    b.Property<int?>("ApprovedById")
+                        .HasColumnType("int");
+
+                    b.Property<string>("BusinessName")
+                        .IsRequired()
+                        .HasColumnType("longtext");
+
+                    b.Property<DateTime?>("ContractEnd")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<DateTime>("ContractStart")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<string>("ContractStatus")
+                        .IsRequired()
+                        .HasColumnType("longtext");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<decimal>("MonthlyRate")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<int>("UserId")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UserId");
+
+                    b.ToTable("TrainerTenants");
+                });
+
+            modelBuilder.Entity("StandUpFitness.Models.TrainerWeeklyReport", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    b.Property<int>("ClientId")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<string>("GoalsJson")
+                        .IsRequired()
+                        .HasColumnType("longtext");
+
+                    b.Property<string>("NutritionJson")
+                        .IsRequired()
+                        .HasColumnType("longtext");
+
+                    b.Property<string>("PdfFile")
+                        .HasColumnType("longtext");
+
+                    b.Property<string>("Summary")
+                        .IsRequired()
+                        .HasColumnType("longtext");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasColumnType("longtext");
+
+                    b.Property<int>("TrainerId")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<DateTime>("WeekStart")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<int?>("WorkoutPlanId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("WorkoutsJson")
+                        .IsRequired()
+                        .HasColumnType("longtext");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ClientId");
+
+                    b.HasIndex("WorkoutPlanId");
+
+                    b.HasIndex("TrainerId", "ClientId", "WeekStart");
+
+                    b.ToTable("TrainerWeeklyReports");
                 });
 
             modelBuilder.Entity("StandUpFitness.Models.TrainingGroup", b =>
@@ -1001,6 +2127,9 @@ namespace StandUpFitness.Migrations
                         .IsRequired()
                         .HasColumnType("longtext");
 
+                    b.Property<string>("Phone")
+                        .HasColumnType("longtext");
+
                     b.Property<int>("Role")
                         .HasColumnType("int");
 
@@ -1013,6 +2142,90 @@ namespace StandUpFitness.Migrations
                         .IsUnique();
 
                     b.ToTable("Users");
+                });
+
+            modelBuilder.Entity("StandUpFitness.Models.UserNotification", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<bool>("IsRead")
+                        .HasColumnType("tinyint(1)");
+
+                    b.Property<string>("Link")
+                        .HasColumnType("longtext");
+
+                    b.Property<string>("Message")
+                        .IsRequired()
+                        .HasColumnType("longtext");
+
+                    b.Property<DateTime?>("ReadAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasColumnType("longtext");
+
+                    b.Property<string>("Type")
+                        .IsRequired()
+                        .HasColumnType("longtext");
+
+                    b.Property<int>("UserId")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UserId", "IsRead", "CreatedAt");
+
+                    b.ToTable("UserNotifications");
+                });
+
+            modelBuilder.Entity("StandUpFitness.Models.UserRoleAssignment", b =>
+                {
+                    b.Property<int>("UserId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("DynamicRoleId")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("AssignedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.HasKey("UserId", "DynamicRoleId");
+
+                    b.HasIndex("DynamicRoleId");
+
+                    b.ToTable("UserRoleAssignments");
+                });
+
+            modelBuilder.Entity("StandUpFitness.Models.WaterLog", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("Date")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<int>("UserId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("WaterMl")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UserId", "Date")
+                        .IsUnique();
+
+                    b.ToTable("WaterLogs");
                 });
 
             modelBuilder.Entity("StandUpFitness.Models.WorkoutPlan", b =>
@@ -1165,6 +2378,25 @@ namespace StandUpFitness.Migrations
                     b.Navigation("Trainer");
                 });
 
+            modelBuilder.Entity("StandUpFitness.Models.DirectMessage", b =>
+                {
+                    b.HasOne("StandUpFitness.Models.User", "Receiver")
+                        .WithMany()
+                        .HasForeignKey("ReceiverUserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("StandUpFitness.Models.User", "Sender")
+                        .WithMany()
+                        .HasForeignKey("SenderUserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Receiver");
+
+                    b.Navigation("Sender");
+                });
+
             modelBuilder.Entity("StandUpFitness.Models.Expense", b =>
                 {
                     b.HasOne("StandUpFitness.Models.User", "ApprovedBy")
@@ -1208,6 +2440,17 @@ namespace StandUpFitness.Migrations
                     b.Navigation("User");
                 });
 
+            modelBuilder.Entity("StandUpFitness.Models.FoodLogEntry", b =>
+                {
+                    b.HasOne("StandUpFitness.Models.User", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("User");
+                });
+
             modelBuilder.Entity("StandUpFitness.Models.Goal", b =>
                 {
                     b.HasOne("StandUpFitness.Models.Client", "Client")
@@ -1217,6 +2460,65 @@ namespace StandUpFitness.Migrations
                         .IsRequired();
 
                     b.Navigation("Client");
+                });
+
+            modelBuilder.Entity("StandUpFitness.Models.GroupScheduleSlot", b =>
+                {
+                    b.HasOne("StandUpFitness.Models.TrainingGroup", "TrainingGroup")
+                        .WithMany("ScheduleSlots")
+                        .HasForeignKey("TrainingGroupId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("TrainingGroup");
+                });
+
+            modelBuilder.Entity("StandUpFitness.Models.GroupSession", b =>
+                {
+                    b.HasOne("StandUpFitness.Models.Trainer", "SubstituteTrainer")
+                        .WithMany()
+                        .HasForeignKey("SubstituteTrainerId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("StandUpFitness.Models.TrainingGroup", "TrainingGroup")
+                        .WithMany()
+                        .HasForeignKey("TrainingGroupId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("SubstituteTrainer");
+
+                    b.Navigation("TrainingGroup");
+                });
+
+            modelBuilder.Entity("StandUpFitness.Models.GroupWaitlistEntry", b =>
+                {
+                    b.HasOne("StandUpFitness.Models.Client", "Client")
+                        .WithMany()
+                        .HasForeignKey("ClientId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("StandUpFitness.Models.TrainingGroup", "TrainingGroup")
+                        .WithMany()
+                        .HasForeignKey("TrainingGroupId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Client");
+
+                    b.Navigation("TrainingGroup");
+                });
+
+            modelBuilder.Entity("StandUpFitness.Models.GymNotice", b =>
+                {
+                    b.HasOne("StandUpFitness.Models.User", "CreatedByUser")
+                        .WithMany()
+                        .HasForeignKey("CreatedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("CreatedByUser");
                 });
 
             modelBuilder.Entity("StandUpFitness.Models.GymOwner", b =>
@@ -1266,6 +2568,52 @@ namespace StandUpFitness.Migrations
                     b.Navigation("Invoice");
                 });
 
+            modelBuilder.Entity("StandUpFitness.Models.NutritionProfile", b =>
+                {
+                    b.HasOne("StandUpFitness.Models.User", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("User");
+                });
+
+            modelBuilder.Entity("StandUpFitness.Models.PaymentTransaction", b =>
+                {
+                    b.HasOne("StandUpFitness.Models.Client", "Client")
+                        .WithMany()
+                        .HasForeignKey("ClientId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("StandUpFitness.Models.Invoice", "Invoice")
+                        .WithMany()
+                        .HasForeignKey("InvoiceId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("StandUpFitness.Models.User", "Staff")
+                        .WithMany()
+                        .HasForeignKey("StaffId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.Navigation("Client");
+
+                    b.Navigation("Invoice");
+
+                    b.Navigation("Staff");
+                });
+
+            modelBuilder.Entity("StandUpFitness.Models.PersonalRecord", b =>
+                {
+                    b.HasOne("StandUpFitness.Models.User", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("User");
+                });
+
             modelBuilder.Entity("StandUpFitness.Models.PersonalSession", b =>
                 {
                     b.HasOne("StandUpFitness.Models.Client", "Client")
@@ -1296,6 +2644,28 @@ namespace StandUpFitness.Migrations
                     b.Navigation("Client");
                 });
 
+            modelBuilder.Entity("StandUpFitness.Models.ProgressPhoto", b =>
+                {
+                    b.HasOne("StandUpFitness.Models.Client", "Client")
+                        .WithMany()
+                        .HasForeignKey("ClientId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Client");
+                });
+
+            modelBuilder.Entity("StandUpFitness.Models.Recipe", b =>
+                {
+                    b.HasOne("StandUpFitness.Models.User", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("User");
+                });
+
             modelBuilder.Entity("StandUpFitness.Models.RefreshToken", b =>
                 {
                     b.HasOne("StandUpFitness.Models.User", "User")
@@ -1307,6 +2677,58 @@ namespace StandUpFitness.Migrations
                     b.Navigation("User");
                 });
 
+            modelBuilder.Entity("StandUpFitness.Models.RentalInvoice", b =>
+                {
+                    b.HasOne("StandUpFitness.Models.TrainerTenant", "TrainerTenant")
+                        .WithMany("Invoices")
+                        .HasForeignKey("TrainerTenantId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("TrainerTenant");
+                });
+
+            modelBuilder.Entity("StandUpFitness.Models.RentalScheduleSlot", b =>
+                {
+                    b.HasOne("StandUpFitness.Models.TrainerTenant", "TrainerTenant")
+                        .WithMany("ScheduleSlots")
+                        .HasForeignKey("TrainerTenantId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("TrainerTenant");
+                });
+
+            modelBuilder.Entity("StandUpFitness.Models.RentalSession", b =>
+                {
+                    b.HasOne("StandUpFitness.Models.TrainerTenant", "TrainerTenant")
+                        .WithMany()
+                        .HasForeignKey("TrainerTenantId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("TrainerTenant");
+                });
+
+            modelBuilder.Entity("StandUpFitness.Models.RolePermission", b =>
+                {
+                    b.HasOne("StandUpFitness.Models.DynamicRole", "DynamicRole")
+                        .WithMany("Permissions")
+                        .HasForeignKey("DynamicRoleId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("StandUpFitness.Models.Permission", "Permission")
+                        .WithMany("Roles")
+                        .HasForeignKey("PermissionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("DynamicRole");
+
+                    b.Navigation("Permission");
+                });
+
             modelBuilder.Entity("StandUpFitness.Models.Salary", b =>
                 {
                     b.HasOne("StandUpFitness.Models.Staff", "Staff")
@@ -1316,6 +2738,17 @@ namespace StandUpFitness.Migrations
                         .IsRequired();
 
                     b.Navigation("Staff");
+                });
+
+            modelBuilder.Entity("StandUpFitness.Models.ShoppingItem", b =>
+                {
+                    b.HasOne("StandUpFitness.Models.User", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("User");
                 });
 
             modelBuilder.Entity("StandUpFitness.Models.Staff", b =>
@@ -1336,6 +2769,23 @@ namespace StandUpFitness.Migrations
                     b.Navigation("User");
                 });
 
+            modelBuilder.Entity("StandUpFitness.Models.TenantClient", b =>
+                {
+                    b.HasOne("StandUpFitness.Models.TrainerTenant", "TrainerTenant")
+                        .WithMany("Clients")
+                        .HasForeignKey("TrainerTenantId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("StandUpFitness.Models.User", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId");
+
+                    b.Navigation("TrainerTenant");
+
+                    b.Navigation("User");
+                });
+
             modelBuilder.Entity("StandUpFitness.Models.Trainer", b =>
                 {
                     b.HasOne("StandUpFitness.Models.User", "User")
@@ -1345,6 +2795,61 @@ namespace StandUpFitness.Migrations
                         .IsRequired();
 
                     b.Navigation("User");
+                });
+
+            modelBuilder.Entity("StandUpFitness.Models.TrainerCommission", b =>
+                {
+                    b.HasOne("StandUpFitness.Models.Finance", "Finance")
+                        .WithMany()
+                        .HasForeignKey("FinanceId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("StandUpFitness.Models.Trainer", "Trainer")
+                        .WithMany()
+                        .HasForeignKey("TrainerId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Finance");
+
+                    b.Navigation("Trainer");
+                });
+
+            modelBuilder.Entity("StandUpFitness.Models.TrainerTenant", b =>
+                {
+                    b.HasOne("StandUpFitness.Models.User", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("User");
+                });
+
+            modelBuilder.Entity("StandUpFitness.Models.TrainerWeeklyReport", b =>
+                {
+                    b.HasOne("StandUpFitness.Models.Client", "Client")
+                        .WithMany()
+                        .HasForeignKey("ClientId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("StandUpFitness.Models.Trainer", "Trainer")
+                        .WithMany()
+                        .HasForeignKey("TrainerId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("StandUpFitness.Models.WorkoutPlan", "WorkoutPlan")
+                        .WithMany()
+                        .HasForeignKey("WorkoutPlanId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.Navigation("Client");
+
+                    b.Navigation("Trainer");
+
+                    b.Navigation("WorkoutPlan");
                 });
 
             modelBuilder.Entity("StandUpFitness.Models.TrainingGroup", b =>
@@ -1363,6 +2868,47 @@ namespace StandUpFitness.Migrations
                     b.Navigation("GymOwner");
 
                     b.Navigation("Trainer");
+                });
+
+            modelBuilder.Entity("StandUpFitness.Models.UserNotification", b =>
+                {
+                    b.HasOne("StandUpFitness.Models.User", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("User");
+                });
+
+            modelBuilder.Entity("StandUpFitness.Models.UserRoleAssignment", b =>
+                {
+                    b.HasOne("StandUpFitness.Models.DynamicRole", "DynamicRole")
+                        .WithMany("Users")
+                        .HasForeignKey("DynamicRoleId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("StandUpFitness.Models.User", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("DynamicRole");
+
+                    b.Navigation("User");
+                });
+
+            modelBuilder.Entity("StandUpFitness.Models.WaterLog", b =>
+                {
+                    b.HasOne("StandUpFitness.Models.User", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("User");
                 });
 
             modelBuilder.Entity("StandUpFitness.Models.WorkoutPlan", b =>
@@ -1404,6 +2950,13 @@ namespace StandUpFitness.Migrations
                     b.Navigation("WorkoutPlans");
                 });
 
+            modelBuilder.Entity("StandUpFitness.Models.DynamicRole", b =>
+                {
+                    b.Navigation("Permissions");
+
+                    b.Navigation("Users");
+                });
+
             modelBuilder.Entity("StandUpFitness.Models.FinanceCategory", b =>
                 {
                     b.Navigation("Finances");
@@ -1421,6 +2974,11 @@ namespace StandUpFitness.Migrations
                     b.Navigation("Items");
                 });
 
+            modelBuilder.Entity("StandUpFitness.Models.Permission", b =>
+                {
+                    b.Navigation("Roles");
+                });
+
             modelBuilder.Entity("StandUpFitness.Models.Trainer", b =>
                 {
                     b.Navigation("DietPlans");
@@ -1432,9 +2990,20 @@ namespace StandUpFitness.Migrations
                     b.Navigation("WorkoutPlans");
                 });
 
+            modelBuilder.Entity("StandUpFitness.Models.TrainerTenant", b =>
+                {
+                    b.Navigation("Clients");
+
+                    b.Navigation("Invoices");
+
+                    b.Navigation("ScheduleSlots");
+                });
+
             modelBuilder.Entity("StandUpFitness.Models.TrainingGroup", b =>
                 {
                     b.Navigation("Attendance");
+
+                    b.Navigation("ScheduleSlots");
                 });
 
             modelBuilder.Entity("StandUpFitness.Models.User", b =>

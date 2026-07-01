@@ -45,6 +45,12 @@ public class ProgressController : ControllerBase
                 p.Chest,
                 p.Waist,
                 p.Hips,
+                p.Arms,
+                p.Thighs,
+                p.Calves,
+                p.Shoulders,
+                p.Back,
+                p.BodyFat,
                 p.Notes
             })
             .ToListAsync();
@@ -56,6 +62,8 @@ public class ProgressController : ControllerBase
     [HttpPost]
     public async Task<IActionResult> Create([FromBody] ProgressRequest request)
     {
+        var validation = ValidateProgress(request);
+        if (validation != null) return validation;
         if (!await CanAccessClientAsync(request.ClientId)) return Forbid();
         var log = new ProgressLog
         {
@@ -65,11 +73,47 @@ public class ProgressController : ControllerBase
             Chest = request.Chest,
             Waist = request.Waist,
             Hips = request.Hips,
+            Arms = request.Arms,
+            Thighs = request.Thighs,
+            Calves = request.Calves,
+            Shoulders = request.Shoulders,
+            Back = request.Back,
+            BodyFat = request.BodyFat,
             Notes = request.Notes ?? ""
         };
         _context.ProgressLogs.Add(log);
         await _context.SaveChangesAsync();
-        return Ok(new { log.Id });
+        return Ok(new
+        {
+            log.Id,
+            log.Date,
+            log.Weight,
+            log.Chest,
+            log.Waist,
+            log.Hips,
+            log.Arms,
+            log.Thighs,
+            log.Calves,
+            log.Shoulders,
+            log.Back,
+            log.BodyFat,
+            log.Notes
+        });
+    }
+
+    private BadRequestObjectResult? ValidateProgress(ProgressRequest request)
+    {
+        if (request.ClientId < 1) return BadRequest(new { message = "Client is required" });
+        if (request.Weight <= 0 || request.Weight > 1000) return BadRequest(new { message = "Weight must be greater than zero" });
+        if (request.Date.HasValue && request.Date.Value.Date > DateTime.UtcNow.Date.AddDays(1))
+            return BadRequest(new { message = "Date cannot be in the future" });
+
+        var measurements = new[] { request.Chest, request.Waist, request.Hips, request.Arms, request.Thighs, request.Calves, request.Shoulders, request.Back };
+        if (measurements.Any(v => v.HasValue && (v.Value < 0 || v.Value > 400)))
+            return BadRequest(new { message = "Measurements must be between 0 and 400 cm" });
+        if (request.BodyFat.HasValue && (request.BodyFat.Value < 0 || request.BodyFat.Value > 100))
+            return BadRequest(new { message = "Body fat must be between 0 and 100" });
+        return null;
     }
 
     // DELETE: api/progress/{id}
@@ -93,5 +137,11 @@ public class ProgressRequest
     public decimal? Chest { get; set; }
     public decimal? Waist { get; set; }
     public decimal? Hips { get; set; }
+    public decimal? Arms { get; set; }
+    public decimal? Thighs { get; set; }
+    public decimal? Calves { get; set; }
+    public decimal? Shoulders { get; set; }
+    public decimal? Back { get; set; }
+    public decimal? BodyFat { get; set; }
     public string? Notes { get; set; }
 }

@@ -3,6 +3,7 @@ import { useAuth } from '../../contexts/AuthContext'
 import { useNotification } from '../../contexts/NotificationContext'
 import { roleLabel } from '../../lib/roles'
 import { titleForPath } from './navItems'
+import { Menu, Bell } from 'lucide-react'
 
 function initials(name?: string): string {
   if (!name) return 'U'
@@ -16,18 +17,18 @@ function initials(name?: string): string {
 
 export default function AppHeader({ onMenu }: { onMenu: () => void }) {
   const { user } = useAuth()
-  const { notifications } = useNotification()
+  const { unreadCount } = useNotification()
   const { pathname } = useLocation()
 
   return (
-    <header className="sticky top-0 z-20 flex h-16 items-center justify-between border-b border-gray-200 bg-white/90 px-4 backdrop-blur md:px-8">
+    <header className="sticky top-0 z-20 flex h-16 items-center justify-between border-b border-gray-200 bg-white px-4 md:px-8">
       <div className="flex items-center gap-3">
         <button
           onClick={onMenu}
           className="flex h-10 w-10 items-center justify-center rounded-lg text-gray-600 hover:bg-gray-100 md:hidden"
           aria-label="Menu"
         >
-          ☰
+          <Menu className="h-5 w-5" />
         </button>
         <div>
           <h1 className="text-lg font-bold text-gray-900">{titleForPath(pathname)}</h1>
@@ -39,10 +40,10 @@ export default function AppHeader({ onMenu }: { onMenu: () => void }) {
 
       <div className="flex items-center gap-3">
         <button className="relative flex h-10 w-10 items-center justify-center rounded-lg text-gray-600 hover:bg-gray-100" aria-label="Njoftime">
-          <span className="text-lg">🔔</span>
-          {notifications.length > 0 && (
+          <Bell className="h-5 w-5" />
+          {unreadCount > 0 && (
             <span className="absolute right-1.5 top-1.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-coral-500 px-1 text-[10px] font-bold text-white">
-              {notifications.length}
+              {unreadCount > 99 ? '99+' : unreadCount}
             </span>
           )}
         </button>

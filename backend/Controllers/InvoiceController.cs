@@ -23,7 +23,7 @@ public class InvoiceController : ControllerBase
     public async Task<IActionResult> GetInvoice(int id)
     {
         var invoice = await _context.Invoices
-            .Include(i => i.Client)
+            .Include(i => i.Client).ThenInclude(c => c.User)
             .Include(i => i.Items)
             .FirstOrDefaultAsync(i => i.Id == id);
 
@@ -90,7 +90,8 @@ public class InvoiceController : ControllerBase
                 Description = item.Description,
                 Quantity = item.Quantity,
                 UnitPrice = item.UnitPrice,
-                Total = item.Quantity * item.UnitPrice
+                Total = item.Quantity * item.UnitPrice,
+                GroupId = item.GroupId
             });
         }
 
@@ -110,7 +111,9 @@ public class InvoiceController : ControllerBase
     [HttpPost("{id}/mark-paid")]
     public async Task<IActionResult> MarkAsPaid(int id, [FromBody] MarkPaidRequest request)
     {
-        var invoice = await _context.Invoices.FindAsync(id);
+        var invoice = await _context.Invoices
+            .Include(i => i.Items)
+            .FirstOrDefaultAsync(i => i.Id == id);
         if (invoice == null)
             return NotFound();
 
@@ -131,6 +134,46 @@ public class InvoiceController : ControllerBase
         };
 
         _context.Finances.Add(finance);
+
+        // GAP-7: auto-enroll the client into any group tied to a paid invoice line.
+        var groupIds = invoice.Items
+            .Where(it => it.GroupId.HasValue)
+            .Select(it => it.GroupId!.Value)
+            .Distinct()
+            .ToList();
+        if (groupIds.Count > 0)
+        {
+            var client = await _context.Clients
+                .Include(c => c.Groups)
+                .FirstOrDefaultAsync(c => c.Id == invoice.ClientId);
+            if (client != null)
+            {
+                var groups = await _context.TrainingGroups
+                    .Include(g => g.Clients)
+                    .Where(g => groupIds.Contains(g.Id))
+                    .ToListAsync();
+                foreach (var g in groups)
+                {
+                    if (client.Groups.Any(x => x.Id == g.Id)) continue;
+                    if (g.Clients.Count >= g.MaxCapacity)
+                    {
+                        var waiting = await _context.GroupWaitlistEntries.AnyAsync(w =>
+                            w.TrainingGroupId == g.Id && w.ClientId == client.Id && w.Status == "waiting");
+                        if (!waiting)
+                            _context.GroupWaitlistEntries.Add(new GroupWaitlistEntry
+                            {
+                                TrainingGroupId = g.Id,
+                                ClientId = client.Id
+                            });
+                    }
+                    else
+                    {
+                        g.Clients.Add(client);
+                    }
+                }
+            }
+        }
+
         await _context.SaveChangesAsync();
 
         return Ok(new { message = "Invoice marked as paid" });
@@ -211,6 +254,7 @@ public class InvoiceItemRequest
     public string Description { get; set; } = null!;
     public int Quantity { get; set; }
     public decimal UnitPrice { get; set; }
+    public int? GroupId { get; set; }
 }
 
 public class MarkPaidRequest

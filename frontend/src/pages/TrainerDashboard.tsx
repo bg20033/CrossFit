@@ -1,3 +1,4 @@
+import { CalendarDays, Dumbbell, Library, Users, UtensilsCrossed } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { useAuth } from '../contexts/AuthContext'
 import api from '../utils/api'
@@ -73,23 +74,23 @@ export default function TrainerDashboard() {
     <DashboardShell>
       <DashboardHeader
         badge="Trajner"
-        title={`Përshëndetje, ${user?.name?.split(' ')[0] || 'Trajner'} 💪`}
+        title={`Përshëndetje, ${user?.name?.split(' ')[0] || 'Trajner'}`}
         subtitle="Grupet, planet e ushtrimeve dhe klientët e tu në një vend."
       />
 
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-        <StatCard icon="📅" accent="green" label="Grupet e mia" value={loading ? '…' : groups.length} />
-        <StatCard icon="👥" accent="blue" label="Anëtarë gjithsej" value={loading ? '…' : totalMembers} />
-        <StatCard icon="💪" accent="purple" label="Plane ushtrimesh" value={loading ? '…' : counts.workouts} />
-        <StatCard icon="🍽️" accent="orange" label="Plane diete" value={loading ? '…' : counts.diets} />
+        <StatCard icon={<CalendarDays className="h-5 w-5" />} accent="green" label="Grupet e mia" value={loading ? '…' : groups.length} />
+        <StatCard icon={<Users className="h-5 w-5" />} accent="blue" label="Anëtarë gjithsej" value={loading ? '…' : totalMembers} />
+        <StatCard icon={<Dumbbell className="h-5 w-5" />} accent="purple" label="Plane ushtrimesh" value={loading ? '…' : counts.workouts} />
+        <StatCard icon={<UtensilsCrossed className="h-5 w-5" />} accent="orange" label="Plane diete" value={loading ? '…' : counts.diets} />
       </div>
 
       <Panel title="Aksione të shpejta">
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <QuickAction to="/trainer/groups" icon="📚" label="Grupet" accent="green" />
-          <QuickAction to="/trainer/workout-builder" icon="💪" label="Krijo Ushtrime" accent="purple" />
-          <QuickAction to="/trainer/diets" icon="🍽️" label="Dietat" accent="orange" />
-          <QuickAction to="/trainer/clients" icon="👥" label="Klientët" accent="blue" />
+          <QuickAction to="/trainer/groups" icon={<Library className="h-5 w-5" />} label="Grupet" accent="green" />
+          <QuickAction to="/trainer/workout-builder" icon={<Dumbbell className="h-5 w-5" />} label="Krijo Ushtrime" accent="purple" />
+          <QuickAction to="/trainer/diets" icon={<UtensilsCrossed className="h-5 w-5" />} label="Dietat" accent="orange" />
+          <QuickAction to="/trainer/clients" icon={<Users className="h-5 w-5" />} label="Klientët" accent="blue" />
         </div>
       </Panel>
 
@@ -103,7 +104,7 @@ export default function TrainerDashboard() {
         {loading ? (
           <p className="py-6 text-center text-sm text-gray-400">Duke ngarkuar…</p>
         ) : groups.length === 0 ? (
-          <EmptyState icon="📅" text="Ende s'ke grupe. Krijo një te seksioni Grupet." />
+          <EmptyState icon={<CalendarDays className="h-5 w-5" />} text="Ende s'ke grupe. Krijo një te seksioni Grupet." />
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">

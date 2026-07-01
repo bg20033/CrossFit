@@ -1,3 +1,4 @@
+import { CalendarDays, Hourglass, Users } from 'lucide-react'
 import { useState, useEffect } from 'react'
 import { Button } from '../components/ui/button'
 import { useAuth } from '../contexts/AuthContext'
@@ -24,6 +25,7 @@ interface GroupDetail {
   id: number
   name: string
   members: Member[]
+  waitlist: WaitlistEntry[]
 }
 
 interface Group {
@@ -35,6 +37,14 @@ interface Group {
   scheduleEnd: string
   maxCapacity: number
   membersCount: number
+  waitlistCount: number
+}
+
+interface WaitlistEntry {
+  id: number
+  clientId: number
+  name: string
+  requestedAt: string
 }
 
 const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
@@ -65,7 +75,12 @@ export default function TrainerGroups() {
   const openDetail = async (groupId: number) => {
     try {
       const res = await api.get(`/traininggroups/${groupId}`)
-      setDetail({ id: res.data.id, name: res.data.name, members: res.data.members ?? [] })
+      setDetail({
+        id: res.data.id,
+        name: res.data.name,
+        members: res.data.members ?? [],
+        waitlist: res.data.waitlist ?? [],
+      })
     } catch {
       addNotification('Gabim', 'Hapja e grupit dështoi.', 'error')
     }
@@ -75,13 +90,37 @@ export default function TrainerGroups() {
     e.preventDefault()
     if (!detail) return
     try {
-      await api.post(`/traininggroups/${detail.id}/add-member`, { clientId: parseInt(newMemberId) })
+      const res = await api.post(`/traininggroups/${detail.id}/add-member`, { clientId: parseInt(newMemberId) })
       setNewMemberId('')
-      addNotification('Sukses', 'Anëtari u shtua.', 'success')
+      addNotification('Sukses', res.data?.waitlisted ? 'Grupi është plot; klienti u fut në waitlist.' : 'Anëtari u shtua.', 'success')
       openDetail(detail.id)
       fetchGroups()
     } catch (err: any) {
       addNotification('Gabim', err.response?.data?.message || err.response?.data || 'Shtimi dështoi.', 'error')
+    }
+  }
+
+  const removeMember = async (clientId: number) => {
+    if (!detail) return
+    try {
+      await api.post(`/traininggroups/${detail.id}/remove-member`, { clientId })
+      addNotification('Ruajtur', 'Anëtari u largua; waitlist u kontrollua automatikisht.', 'success')
+      openDetail(detail.id)
+      fetchGroups()
+    } catch {
+      addNotification('Gabim', 'Largimi i anëtarit dështoi.', 'error')
+    }
+  }
+
+  const promoteWaitlist = async () => {
+    if (!detail) return
+    try {
+      const res = await api.post(`/traininggroups/${detail.id}/waitlist/promote`)
+      addNotification('Waitlist', res.data?.promoted ? 'Klienti i radhës u promovua.' : 'S’ka vend të lirë ose waitlist është bosh.', res.data?.promoted ? 'success' : 'info')
+      openDetail(detail.id)
+      fetchGroups()
+    } catch {
+      addNotification('Gabim', 'Promovimi nga waitlist dështoi.', 'error')
     }
   }
 
@@ -92,6 +131,21 @@ export default function TrainerGroups() {
       addNotification('Ruajtur', isPresent ? 'Shënuar prezent.' : 'Shënuar mungesë.', 'success')
     } catch {
       addNotification('Gabim', 'Regjistrimi i prezencës dështoi.', 'error')
+    }
+  }
+
+  const batchCheckIn = async (isPresent: boolean) => {
+    if (!detail || detail.members.length === 0) return
+    try {
+      const res = await api.post('/attendance/batch', {
+        groupId: detail.id,
+        isPresent,
+        clientIds: detail.members.map((m) => m.id),
+      })
+      const n = (res.data?.added ?? 0) + (res.data?.updated ?? 0)
+      addNotification('Prezenca', `${n} anëtarë u shënuan ${isPresent ? 'prezent' : 'mungesë'}.`, 'success')
+    } catch {
+      addNotification('Gabim', 'Check-in në grup dështoi.', 'error')
     }
   }
 
@@ -195,7 +249,7 @@ export default function TrainerGroups() {
         {loading ? (
           <p className="py-6 text-center text-sm text-gray-400">Duke ngarkuar…</p>
         ) : groups.length === 0 ? (
-          <EmptyState icon="📅" text="Ende s'ke grupe. Krijo të parin me '+ Grup i ri'." />
+          <EmptyState icon={<CalendarDays className="h-5 w-5" />} text="Ende s'ke grupe. Krijo të parin me '+ Grup i ri'." />
         ) : (
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
             {groups.map((g) => {
@@ -206,6 +260,11 @@ export default function TrainerGroups() {
                     <h3 className="text-lg font-semibold text-gray-900">{g.name}</h3>
                     <Badge accent={full ? 'gray' : 'green'}>{g.membersCount ?? 0}/{g.maxCapacity}</Badge>
                   </div>
+                  {(g.waitlistCount ?? 0) > 0 && (
+                    <div className="mt-3">
+                      <Badge>{g.waitlistCount} në pritje</Badge>
+                    </div>
+                  )}
                   {g.description && <p className="mt-1 text-sm text-gray-500">{g.description}</p>}
                   <div className="mt-4 space-y-1 text-sm text-gray-600">
                     <p><span className="text-gray-400">Dita:</span> {DAY_AL[g.dayOfWeek] ?? g.dayOfWeek}</p>
@@ -232,24 +291,66 @@ export default function TrainerGroups() {
             <Button type="submit" className={primaryBtn}>Shto</Button>
           </form>
 
-          {detail.members.length === 0 ? (
-            <EmptyState icon="👥" text="Ende s'ka anëtarë në këtë grup." />
-          ) : (
-            <div className="space-y-2">
-              {detail.members.map((m) => (
-                <div key={m.id} className="flex items-center justify-between rounded-lg border border-gray-200 px-3 py-2">
-                  <div>
-                    <p className="text-sm font-medium text-gray-800">{m.name}</p>
-                    <p className="text-xs text-gray-400">{m.email}</p>
-                  </div>
-                  <div className="flex gap-2">
-                    <Button size="sm" className={primaryBtn} onClick={() => recordAttendance(m.id, true)}>Prezent</Button>
-                    <Button size="sm" variant="outline" onClick={() => recordAttendance(m.id, false)}>Mungesë</Button>
-                  </div>
+          <div className="space-y-5">
+            <div>
+              <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                <h4 className="text-sm font-semibold text-gray-900">Anëtarët</h4>
+                <div className="flex items-center gap-2">
+                  {detail.members.length > 0 && (
+                    <>
+                      <Button size="sm" className={primaryBtn} onClick={() => batchCheckIn(true)}>Të gjithë prezent</Button>
+                      <Button size="sm" variant="outline" onClick={() => batchCheckIn(false)}>Të gjithë mungesë</Button>
+                    </>
+                  )}
+                  <Badge>{detail.members.length}</Badge>
                 </div>
-              ))}
+              </div>
+              {detail.members.length === 0 ? (
+                <EmptyState icon={<Users className="h-5 w-5" />} text="Ende s'ka anëtarë në këtë grup." />
+              ) : (
+                <div className="space-y-2">
+                  {detail.members.map((m) => (
+                    <div key={m.id} className="flex flex-col gap-3 rounded-lg border border-gray-200 px-3 py-2 sm:flex-row sm:items-center sm:justify-between">
+                      <div>
+                        <p className="text-sm font-medium text-gray-800">{m.name}</p>
+                        <p className="text-xs text-gray-400">{m.email}</p>
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                        <Button size="sm" className={primaryBtn} onClick={() => recordAttendance(m.id, true)}>Prezent</Button>
+                        <Button size="sm" variant="outline" onClick={() => recordAttendance(m.id, false)}>Mungesë</Button>
+                        <Button size="sm" variant="outline" onClick={() => removeMember(m.id)}>Largo</Button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
-          )}
+
+            <div>
+              <div className="mb-2 flex items-center justify-between">
+                <h4 className="text-sm font-semibold text-gray-900">Waitlist</h4>
+                <div className="flex items-center gap-2">
+                  <Badge>{detail.waitlist.length}</Badge>
+                  <Button size="sm" variant="outline" onClick={promoteWaitlist} disabled={detail.waitlist.length === 0}>Promovo</Button>
+                </div>
+              </div>
+              {detail.waitlist.length === 0 ? (
+                <EmptyState icon={<Hourglass className="h-5 w-5" />} text="S'ka klientë në pritje për këtë grup." />
+              ) : (
+                <div className="space-y-2">
+                  {detail.waitlist.map((w, index) => (
+                    <div key={w.id} className="flex items-center justify-between rounded-lg border border-gray-200 px-3 py-2">
+                      <div>
+                        <p className="text-sm font-medium text-gray-800">{index + 1}. {w.name}</p>
+                        <p className="text-xs text-gray-400">Client ID: {w.clientId}</p>
+                      </div>
+                      <p className="text-xs text-gray-400">{new Date(w.requestedAt).toLocaleDateString('sq-AL')}</p>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
         </Modal>
       )}
     </DashboardShell>

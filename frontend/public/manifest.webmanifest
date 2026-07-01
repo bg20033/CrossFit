@@ -1,0 +1,21 @@
+{
+  "name": "Stand Up CrossFit",
+  "short_name": "Stand Up",
+  "description": "Menaxhim i sallës CrossFit për admin, arka, trajnerë dhe klientë.",
+  "lang": "sq",
+  "start_url": "/dashboard",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#ECEAE4",
+  "theme_color": "#ECEAE4",
+  "categories": ["fitness", "business", "productivity"],
+  "icons": [
+    {
+      "src": "/icons/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

@@ -19,4 +19,7 @@ public class TrainingGroup
     public GymOwner? GymOwner { get; set; }
     public ICollection<Client> Clients { get; set; } = new List<Client>();
     public ICollection<Attendance> Attendance { get; set; } = new List<Attendance>();
+    // Recurring weekly sessions. The legacy DayOfWeek/ScheduleStart/ScheduleEnd
+    // above mirror the earliest slot for backward compatibility.
+    public ICollection<GroupScheduleSlot> ScheduleSlots { get; set; } = new List<GroupScheduleSlot>();
 }

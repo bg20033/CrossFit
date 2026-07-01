@@ -1,3 +1,4 @@
+import { ArrowDownRight, ArrowUpRight, Banknote, BarChart3, CalendarDays, CheckCircle, Dumbbell, Receipt, Sigma, User, Users, Wallet } from 'lucide-react'
 import { useQuery } from '@tanstack/react-query'
 import { useAuth } from '../contexts/AuthContext'
 import api from '../utils/api'
@@ -23,8 +24,19 @@ const MONTHS = ['Jan', 'Shk', 'Mar', 'Pri', 'Maj', 'Qer', 'Korr', 'Gush', 'Sht',
 
 interface Tx { id: number; type: string; amount: number; description?: string; transactionDate?: string; category?: string }
 interface PendingInvoice { id: number; invoiceNumber: string; client: string; totalAmount: number; daysOverdue: number }
+interface TrainingGroupRow {
+  id: number
+  name: string
+  trainer: string
+  dayOfWeek: string
+  scheduleStart: string
+  scheduleEnd: string
+  maxCapacity: number
+  membersCount: number
+}
 
 const val = (r: PromiseSettledResult<any>) => (r.status === 'fulfilled' ? r.value.data : null)
+const timeOnly = (iso: string) => new Date(iso).toLocaleTimeString('sq-AL', { hour: '2-digit', minute: '2-digit' })
 
 export default function AdminDashboard() {
   const { user } = useAuth()
@@ -70,6 +82,11 @@ export default function AdminDashboard() {
     queryFn: async () => ((await api.get('/attendance/overview')).data?.byWeekday ?? {}) as Record<string, number>,
   })
 
+  const groupsQ = useQuery({
+    queryKey: ['traininggroups', 'dashboard'],
+    queryFn: async () => ((await api.get('/traininggroups')).data ?? []) as TrainingGroupRow[],
+  })
+
   const monthlyQ = useQuery({
     queryKey: ['finance', 'monthly6'],
     queryFn: async () => {
@@ -92,12 +109,15 @@ export default function AdminDashboard() {
   const pending = pendingQ.data ?? []
   const weekday = weekdayQ.data ?? {}
   const monthly = monthlyQ.data ?? []
+  const groups = groupsQ.data ?? []
+  const todayName = new Date().toLocaleDateString('en-US', { weekday: 'long' })
+  const todayGroups = groups.filter((g) => g.dayOfWeek === todayName).slice(0, 6)
 
   return (
     <DashboardShell>
       <DashboardHeader
-        badge="Admin Panel"
-        title={`Mirë se erdhe, ${user?.name?.split(' ')[0] || 'Admin'} 👋`}
+        badge="Paneli i Adminit"
+        title={`Mirë se erdhe, ${user?.name?.split(' ')[0] || 'Admin'}`}
         subtitle="Pamje e përgjithshme e palestrës, financave dhe operacioneve."
       />
 
@@ -105,9 +125,9 @@ export default function AdminDashboard() {
         <StatCardsSkeleton count={3} />
       ) : (
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-          <StatCard icon="↗" label="Të hyrat (30 ditë)" value={eur(summary.totalIncome)} />
-          <StatCard icon="↘" label="Shpenzimet (30 ditë)" value={eur(summary.totalExpenses)} />
-          <StatCard icon="∑" label="Bilanci" value={eur(summary.balance)} sub={summary.balance >= 0 ? 'Pozitiv' : 'Negativ'} />
+          <StatCard icon={<ArrowUpRight className="h-5 w-5" />} label="Të hyrat (30 ditë)" value={eur(summary.totalIncome)} />
+          <StatCard icon={<ArrowDownRight className="h-5 w-5" />} label="Shpenzimet (30 ditë)" value={eur(summary.totalExpenses)} />
+          <StatCard icon={<Sigma className="h-5 w-5" />} label="Bilanci" value={eur(summary.balance)} sub={summary.balance >= 0 ? 'Pozitiv' : 'Negativ'} />
         </div>
       )}
 
@@ -115,12 +135,43 @@ export default function AdminDashboard() {
         <StatCardsSkeleton count={4} />
       ) : (
         <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-          <StatCard icon="👥" label="Klientë" value={counts.clients} />
-          <StatCard icon="🏋️" label="Trajnerë" value={counts.trainers} />
-          <StatCard icon="👔" label="Staf" value={counts.staff} />
-          <StatCard icon="📅" label="Grupe aktive" value={counts.groups} />
+          <StatCard icon={<Users className="h-5 w-5" />} label="Klientë" value={counts.clients} />
+          <StatCard icon={<Dumbbell className="h-5 w-5" />} label="Trajnerë" value={counts.trainers} />
+          <StatCard icon={<User className="h-5 w-5" />} label="Staf" value={counts.staff} />
+          <StatCard icon={<CalendarDays className="h-5 w-5" />} label="Grupe aktive" value={counts.groups} />
         </div>
       )}
+
+      <div>
+        <Panel title="Zënia e grupeve sot">
+          {todayGroups.length === 0 ? (
+            <EmptyState icon={<CalendarDays className="h-5 w-5" />} text="S'ka grupe të planifikuara për sot." />
+          ) : (
+            <div className="space-y-3">
+              {todayGroups.map((g) => {
+                const pct = Math.min(100, Math.round((g.membersCount / Math.max(1, g.maxCapacity)) * 100))
+                return (
+                  <div key={g.id} className="rounded-xl border border-gray-100 px-4 py-3">
+                    <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                      <div>
+                        <p className="font-semibold text-gray-900">{g.name}</p>
+                        <p className="text-xs text-gray-400">{timeOnly(g.scheduleStart)} · {g.trainer}</p>
+                      </div>
+                      <span className={`rounded-full px-2.5 py-1 text-xs font-bold ${pct >= 100 ? 'bg-coral-50 text-coral-700' : 'bg-gray-100 text-gray-700'}`}>
+                        {g.membersCount}/{g.maxCapacity}
+                      </span>
+                    </div>
+                    <div className="h-2.5 overflow-hidden rounded-full bg-gray-100">
+                      <div className="h-full rounded-full bg-coral-500" style={{ width: `${pct}%` }} />
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+        </Panel>
+
+      </div>
 
       <Panel
         title="Hyrje vs Dalje (6 muajt e fundit)"
@@ -134,7 +185,7 @@ export default function AdminDashboard() {
         {(() => {
           const max = Math.max(1, ...monthly.flatMap((m) => [m.income, m.expense]))
           const hasData = monthly.some((m) => m.income > 0 || m.expense > 0)
-          if (!hasData) return <EmptyState icon="📊" text="Ende s'ka të dhëna financiare për grafikun." />
+          if (!hasData) return <EmptyState icon={<BarChart3 className="h-5 w-5" />} text="Ende s'ka të dhëna financiare për grafikun." />
           return (
             <div className="flex items-end justify-between gap-3 pt-2" style={{ height: 200 }}>
               {monthly.map((m) => (
@@ -156,7 +207,7 @@ export default function AdminDashboard() {
           {Object.values(weekday).some((v) => v > 0) ? (
             <BarList items={WD_ORDER.map((k) => ({ label: WD_AL[k], value: weekday[k] ?? 0, hint: `${weekday[k] ?? 0}` }))} />
           ) : (
-            <EmptyState icon="📅" text="Ende s'ka check-in këtë muaj." />
+            <EmptyState icon={<CalendarDays className="h-5 w-5" />} text="Ende s'ka check-in këtë muaj." />
           )}
         </Panel>
         <Panel title="Përbërja e ekipit">
@@ -173,17 +224,18 @@ export default function AdminDashboard() {
 
       <Panel title="Aksione të shpejta">
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <QuickAction to="/admin/finance" icon="💰" label="Financat" />
-          <QuickAction to="/admin/clients" icon="👥" label="Klientët" />
-          <QuickAction to="/admin/staff" icon="👔" label="Stafi" />
-          <QuickAction to="/admin/cash-register" icon="🏧" label="Arka" />
+          <QuickAction to="/admin/reports" icon={<BarChart3 className="h-5 w-5" />} label="Raporte" />
+        <QuickAction to="/admin/finance" icon={<Wallet className="h-5 w-5" />} label="Financat" />
+          <QuickAction to="/admin/clients" icon={<Users className="h-5 w-5" />} label="Klientët" />
+          <QuickAction to="/admin/staff" icon={<User className="h-5 w-5" />} label="Stafi" />
+          <QuickAction to="/admin/cash-register" icon={<Banknote className="h-5 w-5" />} label="Arka" />
         </div>
       </Panel>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         <Panel title="Transaksionet e fundit" className="lg:col-span-2">
           {transactions.length === 0 ? (
-            <EmptyState icon="🧾" text="Ende s'ka transaksione. Shtoji te Financat." />
+            <EmptyState icon={<Receipt className="h-5 w-5" />} text="Ende s'ka transaksione. Shtoji te Financat." />
           ) : (
             <div className="divide-y divide-gray-100">
               {transactions.map((t) => {
@@ -212,7 +264,7 @@ export default function AdminDashboard() {
 
         <Panel title="Fatura të papaguara">
           {pending.length === 0 ? (
-            <EmptyState icon="✅" text="S'ka fatura të papaguara." />
+            <EmptyState icon={<CheckCircle className="h-5 w-5" />} text="S'ka fatura të papaguara." />
           ) : (
             <div className="space-y-3">
               {pending.slice(0, 6).map((inv) => (

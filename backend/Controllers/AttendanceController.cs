@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using StandUpFitness.Data;
+using StandUpFitness.Models;
 
 namespace StandUpFitness.Controllers;
 
@@ -34,6 +35,42 @@ public class AttendanceController : ControllerBase
     {
         int diff = ((int)d.DayOfWeek + 6) % 7; // Monday-based
         return d.Date.AddDays(-diff);
+    }
+
+    // POST: api/attendance/batch  — trainer/admin marks a whole group present/absent at once
+    [HttpPost("batch")]
+    [Authorize(Policy = "AdminTrainer")]
+    public async Task<IActionResult> BatchCheckIn([FromBody] BatchAttendanceRequest request)
+    {
+        if (request.ClientIds == null || request.ClientIds.Count == 0)
+            return BadRequest(new { message = "No clients provided" });
+
+        var date = (request.Date ?? DateTime.UtcNow).Date;
+        var added = 0;
+        var updated = 0;
+        foreach (var clientId in request.ClientIds.Distinct())
+        {
+            var existing = await _context.Attendance.FirstOrDefaultAsync(a =>
+                a.ClientId == clientId && a.GroupId == request.GroupId && a.AttendanceDate == date);
+            if (existing == null)
+            {
+                _context.Attendance.Add(new Attendance
+                {
+                    ClientId = clientId,
+                    GroupId = request.GroupId,
+                    AttendanceDate = date,
+                    IsPresent = request.IsPresent
+                });
+                added++;
+            }
+            else
+            {
+                existing.IsPresent = request.IsPresent;
+                updated++;
+            }
+        }
+        await _context.SaveChangesAsync();
+        return Ok(new { added, updated, date });
     }
 
     // GET: api/attendance/client-summary?clientId=1&year=2026&month=6
@@ -138,4 +175,12 @@ public class AttendanceController : ControllerBase
             days
         });
     }
+}
+
+public class BatchAttendanceRequest
+{
+    public int? GroupId { get; set; }
+    public DateTime? Date { get; set; }
+    public bool IsPresent { get; set; } = true;
+    public List<int> ClientIds { get; set; } = new();
 }

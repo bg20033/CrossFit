@@ -1,5 +1,5 @@
 import { lazy, Suspense } from 'react'
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
+import { BrowserRouter, Routes, Route } from 'react-router-dom'
 import { AuthProvider } from './contexts/AuthContext'
 import ProtectedRoute from './components/ProtectedRoute'
 import PublicLayout from './components/public/PublicLayout'
@@ -14,6 +14,7 @@ const Auth = lazy(() => import('./pages/Auth'))
 // App
 const Dashboard = lazy(() => import('./pages/Dashboard'))
 const Settings = lazy(() => import('./pages/Settings'))
+const Messages = lazy(() => import('./pages/Messages'))
 const AdminDashboard = lazy(() => import('./pages/AdminDashboard'))
 const AdminFinance = lazy(() => import('./pages/AdminFinance'))
 const AdminClients = lazy(() => import('./pages/AdminClients'))
@@ -24,16 +25,33 @@ const AdminInvoices = lazy(() => import('./pages/AdminInvoices'))
 const AdminMembershipPlans = lazy(() => import('./pages/AdminMembershipPlans'))
 const AdminRentals = lazy(() => import('./pages/AdminRentals'))
 const AdminCalendar = lazy(() => import('./pages/AdminCalendar'))
+const AdminGroups = lazy(() => import('./pages/AdminGroups'))
+const AdminRoles = lazy(() => import('./pages/AdminRoles'))
 const Payroll = lazy(() => import('./pages/Payroll'))
+const AdminTrainerPayments = lazy(() => import('./pages/AdminTrainerPayments'))
 const TrainerDashboard = lazy(() => import('./pages/TrainerDashboard'))
 const TrainerGroups = lazy(() => import('./pages/TrainerGroups'))
 const TrainerWorkoutBuilder = lazy(() => import('./pages/TrainerWorkoutBuilder'))
 const TrainerDiets = lazy(() => import('./pages/TrainerDiets'))
+const TrainerClients = lazy(() => import('./pages/TrainerClients'))
 const ClientWorkouts = lazy(() => import('./pages/ClientWorkouts'))
 const ClientDiet = lazy(() => import('./pages/ClientDiet'))
 const ClientGoals = lazy(() => import('./pages/ClientGoals'))
 const ClientProgress = lazy(() => import('./pages/ClientProgress'))
 const ClientCalendar = lazy(() => import('./pages/ClientCalendar'))
+const ClientOnboarding = lazy(() => import('./pages/ClientOnboarding'))
+const ClientNutrition = lazy(() => import('./pages/ClientNutrition'))
+const ArkaAccess = lazy(() => import('./pages/ArkaAccess'))
+const TenantDashboard = lazy(() => import('./pages/TenantDashboard'))
+const TenantClients = lazy(() => import('./pages/TenantClients'))
+const TenantSchedule = lazy(() => import('./pages/TenantSchedule'))
+const TenantBilling = lazy(() => import('./pages/TenantBilling'))
+const AdminGroupReport = lazy(() => import('./pages/AdminGroupReport'))
+const AdminReports = lazy(() => import('./pages/AdminReports'))
+const ClientPackageStatus = lazy(() => import('./pages/ClientPackageStatus'))
+const ClientQrCard = lazy(() => import('./pages/ClientQrCard'))
+const ClientLeaderboard = lazy(() => import('./pages/ClientLeaderboard'))
+const NotFound = lazy(() => import('./pages/NotFound'))
 
 function PageFallback() {
   return (
@@ -64,6 +82,7 @@ function App() {
                 {/* Any authenticated role */}
                 <Route path="/dashboard" element={<Dashboard />} />
                 <Route path="/settings" element={<Settings />} />
+                <Route path="/messages" element={<Messages />} />
 
                 {/* Admin / GymOwner only */}
                 <Route element={<ProtectedRoute allowedRoles={['admin', 'gym_owner']} />}>
@@ -73,15 +92,29 @@ function App() {
                   <Route path="/admin/staff" element={<AdminStaff />} />
                   <Route path="/admin/plans" element={<AdminMembershipPlans />} />
                   <Route path="/admin/payroll" element={<Payroll />} />
+                  <Route path="/admin/trainer-payments" element={<AdminTrainerPayments />} />
                   <Route path="/admin/rentals" element={<AdminRentals />} />
                   <Route path="/admin/calendar" element={<AdminCalendar />} />
+                  <Route path="/admin/groups" element={<AdminGroups />} />
+                  <Route path="/admin/group-report/:groupId" element={<AdminGroupReport />} />
+                  <Route path="/admin/reports" element={<AdminReports />} />
+                  <Route path="/admin/roles" element={<AdminRoles />} />
                 </Route>
 
-                {/* Admin / GymOwner / Staff (front desk) */}
-                <Route element={<ProtectedRoute allowedRoles={['admin', 'gym_owner', 'staff']} />}>
+                {/* Front desk: Admin / GymOwner / Staff / Cashier (Arka) */}
+                <Route element={<ProtectedRoute allowedRoles={['admin', 'gym_owner', 'staff', 'cashier']} />}>
                   <Route path="/admin/clients" element={<AdminClients />} />
                   <Route path="/admin/cash-register" element={<AdminCashRegister />} />
                   <Route path="/admin/invoices" element={<AdminInvoices />} />
+                  <Route path="/arka/access" element={<ArkaAccess />} />
+                </Route>
+
+                {/* Trainer-Tenant (rental) — isolated from core staff */}
+                <Route element={<ProtectedRoute allowedRoles={['trainer_tenant']} />}>
+                  <Route path="/tenant" element={<TenantDashboard />} />
+                  <Route path="/tenant/clients" element={<TenantClients />} />
+                  <Route path="/tenant/schedule" element={<TenantSchedule />} />
+                  <Route path="/tenant/billing" element={<TenantBilling />} />
                 </Route>
 
                 {/* Trainer (+ admin oversight) */}
@@ -90,21 +123,31 @@ function App() {
                   <Route path="/trainer/groups" element={<TrainerGroups />} />
                   <Route path="/trainer/workout-builder" element={<TrainerWorkoutBuilder />} />
                   <Route path="/trainer/diets" element={<TrainerDiets />} />
+                  <Route path="/trainer/clients" element={<TrainerClients />} />
                 </Route>
 
-                {/* Client */}
-                <Route element={<ProtectedRoute allowedRoles={['client']} />}>
+                {/* Client + Tenant-client shared screens */}
+                <Route element={<ProtectedRoute allowedRoles={['client', 'tenant_client']} />}>
                   <Route path="/workouts" element={<ClientWorkouts />} />
+                  <Route path="/calendar" element={<ClientCalendar />} />
+                  <Route path="/nutrition" element={<ClientNutrition />} />
+                  <Route path="/onboarding" element={<ClientOnboarding />} />
+                </Route>
+
+                {/* Client only */}
+                <Route element={<ProtectedRoute allowedRoles={['client']} />}>
                   <Route path="/diet" element={<ClientDiet />} />
                   <Route path="/goals" element={<ClientGoals />} />
                   <Route path="/progress" element={<ClientProgress />} />
-                  <Route path="/calendar" element={<ClientCalendar />} />
+                  <Route path="/package" element={<ClientPackageStatus />} />
+                  <Route path="/qr-card" element={<ClientQrCard />} />
+                  <Route path="/leaderboard" element={<ClientLeaderboard />} />
                 </Route>
               </Route>
             </Route>
 
-            {/* Fallback */}
-            <Route path="*" element={<Navigate to="/" replace />} />
+            {/* Fallback — real 404 page */}
+            <Route path="*" element={<NotFound />} />
           </Routes>
         </Suspense>
       </AuthProvider>

@@ -1,7 +1,9 @@
+import { Dumbbell } from 'lucide-react'
 import { useState, useEffect } from 'react'
 import { Button } from '../components/ui/button'
 import { useNotification } from '../contexts/NotificationContext'
 import api from '../utils/api'
+import { toDecimal } from '../utils/number'
 import { eur } from '../utils/format'
 import {
   DashboardShell,
@@ -54,7 +56,7 @@ export default function AdminTrainers() {
     e.preventDefault()
     setError('')
     try {
-      await api.post('/trainers/create', { ...form, hourlyRate: parseFloat(form.hourlyRate) })
+      await api.post('/trainers/create', { ...form, hourlyRate: toDecimal(form.hourlyRate) })
       setShowForm(false)
       setForm(empty)
       addNotification('Sukses', 'Trajneri u krijua.', 'success')
@@ -88,9 +90,9 @@ export default function AdminTrainers() {
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <Field label="Emri"><input name="name" value={form.name} onChange={change} required className={fieldCls} /></Field>
               <Field label="Email"><input type="email" name="email" value={form.email} onChange={change} required className={fieldCls} /></Field>
-              <Field label="Fjalëkalimi"><input type="password" name="password" value={form.password} onChange={change} required className={fieldCls} /></Field>
+              <Field label="Fjalëkalimi"><input type="password" name="password" value={form.password} onChange={change} required minLength={8} className={fieldCls} /></Field>
               <Field label="Specializimi"><input name="specialization" value={form.specialization} onChange={change} placeholder="p.sh. CrossFit, Forcë" className={fieldCls} /></Field>
-              <Field label="Tarifa/orë (€)"><input type="number" step="0.01" name="hourlyRate" value={form.hourlyRate} onChange={change} className={fieldCls} /></Field>
+              <Field label="Tarifa/orë (€)"><input type="text" inputMode="decimal" name="hourlyRate" value={form.hourlyRate} onChange={change} className={fieldCls} /></Field>
             </div>
             <Field label="Bio"><input name="bio" value={form.bio} onChange={change} className={fieldCls} /></Field>
             <Button type="submit" className={primaryBtn}>Krijo</Button>
@@ -102,7 +104,7 @@ export default function AdminTrainers() {
         {loading ? (
           <p className="py-6 text-center text-sm text-gray-400">Duke ngarkuar…</p>
         ) : trainers.length === 0 ? (
-          <EmptyState icon="🏋️" text="Ende s'ka trajnerë. Shto të parin me '+ Trajner i ri'." />
+          <EmptyState icon={<Dumbbell className="h-5 w-5" />} text="Ende s'ka trajnerë. Shto të parin me '+ Trajner i ri'." />
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">

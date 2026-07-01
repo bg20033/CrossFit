@@ -1,3 +1,4 @@
+import { AlertTriangle, CheckCircle2, Info, X, XCircle } from 'lucide-react'
 import { useNotification } from '../contexts/NotificationContext'
 
 export default function NotificationCenter() {
@@ -20,35 +21,41 @@ export default function NotificationCenter() {
   const getIcon = (type: string) => {
     switch (type) {
       case 'success':
-        return '✅'
+        return <CheckCircle2 className="h-5 w-5" />
       case 'error':
-        return '❌'
+        return <XCircle className="h-5 w-5" />
       case 'warning':
-        return '⚠️'
+        return <AlertTriangle className="h-5 w-5" />
       case 'info':
       default:
-        return 'ℹ️'
+        return <Info className="h-5 w-5" />
     }
   }
 
+  if (notifications.length === 0) return null
+
   return (
-    <div className="fixed top-4 right-4 z-50 max-w-sm space-y-3 pointer-events-none">
+    <div className="fixed right-3 top-3 z-50 w-[calc(100vw-1.5rem)] max-w-sm space-y-3 pointer-events-none sm:right-4 sm:top-4 sm:w-full">
       {notifications.map(notif => (
         <div
           key={notif.id}
-          className={`p-4 rounded-lg border shadow-lg pointer-events-auto ${getColorClasses(notif.type)}`}>
+          role="status"
+          className={`rounded-lg border p-4 pointer-events-auto ${getColorClasses(notif.type)}`}>
           <div className="flex justify-between items-start gap-3">
-            <div className="flex gap-2">
-              <span className="text-xl mt-0.5">{getIcon(notif.type)}</span>
-              <div>
-                <h4 className="font-semibold">{notif.title}</h4>
-                <p className="text-sm opacity-90">{notif.message}</p>
+            <div className="flex min-w-0 gap-2">
+              <span className="mt-0.5 shrink-0">{getIcon(notif.type)}</span>
+              <div className="min-w-0">
+                <h4 className="break-words text-sm font-semibold">{notif.title}</h4>
+                {notif.message && <p className="mt-1 break-words text-sm opacity-90">{notif.message}</p>}
               </div>
             </div>
             <button
+              type="button"
               onClick={() => removeNotification(notif.id)}
-              className="text-lg opacity-70 hover:opacity-100">
-              ✕
+              className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md opacity-70 hover:bg-gray-100 hover:opacity-100"
+              aria-label="Mbyll njoftimin"
+            >
+              <X className="h-4 w-4" />
             </button>
           </div>
         </div>

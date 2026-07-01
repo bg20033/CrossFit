@@ -10,7 +10,7 @@ interface AuthContextType {
   isLoading: boolean
   login: (email: string, password: string) => Promise<void>
   logout: () => void
-  register: (data: { email: string; password: string; name: string; role: UserRole }) => Promise<void>
+  register: (data: { email: string; password: string; name: string; role: UserRole; phone?: string }) => Promise<void>
   refreshUser: () => Promise<void>
 }
 
@@ -33,7 +33,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         pid = res.data.id
       }
     } catch (e) {
-      console.error('Failed to resolve profile id:', e)
+      // Profile-specific screens can still load without a profile id; avoid noisy dev-console errors.
     }
     
     setUser(normalized, pid)
@@ -49,8 +49,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           await applyUser(user)
         }
       } catch (error) {
-        console.error('Auth check failed:', error)
         localStorage.removeItem('authToken')
+        localStorage.removeItem('refreshToken')
         storeLogout()
       } finally {
         setLoading(false)
@@ -75,7 +75,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setSidebarOpen(false)
   }
 
-  const register = async (data: { email: string; password: string; name: string; role: UserRole }) => {
+  const register = async (data: { email: string; password: string; name: string; role: UserRole; phone?: string }) => {
     const { user, token, refreshToken } = await api.register(data)
     localStorage.setItem('authToken', token)
     localStorage.setItem('refreshToken', refreshToken)
@@ -87,7 +87,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const user = await api.getMe()
       await applyUser(user)
     } catch (error) {
-      console.error('Failed to refresh user:', error)
+      localStorage.removeItem('authToken')
+      localStorage.removeItem('refreshToken')
+      storeLogout()
     }
   }
 

@@ -1,7 +1,9 @@
+import { Banknote, Briefcase, User } from 'lucide-react'
 import { useState, useEffect } from 'react'
 import { Button } from '../components/ui/button'
 import { useNotification } from '../contexts/NotificationContext'
 import api from '../utils/api'
+import { toDecimal } from '../utils/number'
 import { eur } from '../utils/format'
 import {
   DashboardShell,
@@ -57,7 +59,7 @@ export default function Payroll() {
           const res = await api.post(`/staff/${s.id}/calculate-salary`, {
             year: period.year,
             month: period.month,
-            hoursWorked: parseFloat(period.hours || '0'),
+            hoursWorked: toDecimal(period.hours || '0'),
             overtimeHours: 0,
             bonus: 0,
             deductions: 0,
@@ -90,9 +92,9 @@ export default function Payroll() {
       />
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-        <StatCard icon="👔" label="Punonjës" value={loading ? '…' : staff.length} />
-        <StatCard icon="💼" label="Rroga bazë (total)" value={eur(totalBase)} />
-        <StatCard icon="💶" label="Payroll i gjeneruar" value={Object.keys(results).length ? eur(totalPayroll) : '—'} />
+        <StatCard icon={<User className="h-5 w-5" />} label="Punonjës" value={loading ? '…' : staff.length} />
+        <StatCard icon={<Briefcase className="h-5 w-5" />} label="Rroga bazë (total)" value={eur(totalBase)} />
+        <StatCard icon={<Banknote className="h-5 w-5" />} label="Payroll i gjeneruar" value={Object.keys(results).length ? eur(totalPayroll) : '—'} />
       </div>
 
       <Panel title="Periudha">
@@ -108,7 +110,7 @@ export default function Payroll() {
             <Field label="Viti"><input type="number" value={period.year} onChange={(e) => setPeriod((p) => ({ ...p, year: parseInt(e.target.value) || p.year }))} className={fieldCls} /></Field>
           </div>
           <div className="w-28">
-            <Field label="Orë pune"><input type="number" value={period.hours} onChange={(e) => setPeriod((p) => ({ ...p, hours: e.target.value }))} className={fieldCls} /></Field>
+            <Field label="Orë pune"><input type="text" inputMode="decimal" value={period.hours} onChange={(e) => setPeriod((p) => ({ ...p, hours: e.target.value }))} className={fieldCls} /></Field>
           </div>
         </div>
       </Panel>
@@ -117,7 +119,7 @@ export default function Payroll() {
         {loading ? (
           <p className="py-6 text-center text-sm text-gray-400">Duke ngarkuar…</p>
         ) : staff.length === 0 ? (
-          <EmptyState icon="👔" text="S'ka staf të regjistruar. Shtoji te faqja e Stafit." />
+          <EmptyState icon={<User className="h-5 w-5" />} text="S'ka staf të regjistruar. Shtoji te faqja e Stafit." />
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">

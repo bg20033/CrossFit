@@ -58,6 +58,8 @@ public class GoalsController : ControllerBase
                 g.Title,
                 g.Description,
                 g.Type,
+                g.TargetValue,
+                g.Unit,
                 Client = g.Client.User.Name,
                 g.TargetDate,
                 g.Status,
@@ -71,6 +73,8 @@ public class GoalsController : ControllerBase
             g.Title,
             g.Description,
             g.Type,
+            g.TargetValue,
+            g.Unit,
             g.Client,
             g.TargetDate,
             g.Status,
@@ -86,7 +90,7 @@ public class GoalsController : ControllerBase
     public async Task<IActionResult> GetGoal(int id)
     {
         var goal = await _context.Goals
-            .Include(g => g.Client)
+            .Include(g => g.Client).ThenInclude(c => c.User)
             .FirstOrDefaultAsync(g => g.Id == id);
 
         if (goal == null)
@@ -98,6 +102,8 @@ public class GoalsController : ControllerBase
             goal.Title,
             goal.Description,
             goal.Type,
+            goal.TargetValue,
+            goal.Unit,
             Client = goal.Client.User.Name,
             goal.TargetDate,
             goal.Status,
@@ -108,22 +114,30 @@ public class GoalsController : ControllerBase
     }
 
     // POST: api/goals/create
-    [Authorize(Policy = "AdminTrainer")]
+    // Clients create their own goals; staff/trainers can create for any client.
     [HttpPost("create")]
     public async Task<IActionResult> CreateGoal([FromBody] CreateGoalRequest request)
     {
+        if (!await CanAccessClientAsync(request.ClientId)) return Forbid();
+
         var client = await _context.Clients.FindAsync(request.ClientId);
         if (client == null)
-            return BadRequest("Client not found");
+            return BadRequest(new { message = "Client not found" });
 
-        if (request.TargetDate <= DateTime.UtcNow)
-            return BadRequest("Target date must be in the future");
+        if (string.IsNullOrWhiteSpace(request.Title))
+            return BadRequest(new { message = "Title is required" });
+        if (request.TargetDate.Date < DateTime.UtcNow.Date)
+            return BadRequest(new { message = "Target date must be in the future" });
+        if (request.TargetValue.HasValue && (request.TargetValue.Value < 0 || request.TargetValue.Value > 100000))
+            return BadRequest(new { message = "Target value is out of range" });
 
         var goal = new Goal
         {
-            Title = request.Title,
-            Description = request.Description,
-            Type = request.Type,
+            Title = request.Title.Trim(),
+            Description = request.Description?.Trim() ?? string.Empty,
+            Type = string.IsNullOrWhiteSpace(request.Type) ? "other" : request.Type.Trim(),
+            TargetValue = request.TargetValue,
+            Unit = request.Unit?.Trim() ?? string.Empty,
             ClientId = request.ClientId,
             TargetDate = request.TargetDate,
             Status = "in_progress"
@@ -147,6 +161,8 @@ public class GoalsController : ControllerBase
         goal.Title = request.Title ?? goal.Title;
         goal.Description = request.Description ?? goal.Description;
         goal.Type = request.Type ?? goal.Type;
+        goal.TargetValue = request.TargetValue ?? goal.TargetValue;
+        goal.Unit = request.Unit ?? goal.Unit;
         goal.TargetDate = request.TargetDate ?? goal.TargetDate;
         goal.Status = request.Status ?? goal.Status;
         goal.UpdatedAt = DateTime.UtcNow;
@@ -163,6 +179,7 @@ public class GoalsController : ControllerBase
         var goal = await _context.Goals.FindAsync(id);
         if (goal == null)
             return NotFound();
+        if (!await CanAccessClientAsync(goal.ClientId)) return Forbid();
 
         goal.Status = "completed";
         goal.UpdatedAt = DateTime.UtcNow;
@@ -179,6 +196,7 @@ public class GoalsController : ControllerBase
         var goal = await _context.Goals.FindAsync(id);
         if (goal == null)
             return NotFound();
+        if (!await CanAccessClientAsync(goal.ClientId)) return Forbid();
 
         goal.Status = "abandoned";
         goal.UpdatedAt = DateTime.UtcNow;
@@ -234,7 +252,9 @@ public class CreateGoalRequest
     public int ClientId { get; set; }
     public string Title { get; set; } = null!;
     public string Description { get; set; } = string.Empty;
-    public string Type { get; set; } = null!; // weight_loss, muscle_gain, strength, endurance, flexibility
+    public string Type { get; set; } = null!; // weight_loss, muscle_gain, strength, endurance, flexibility, benchmark, other
+    public decimal? TargetValue { get; set; }
+    public string? Unit { get; set; }
     public DateTime TargetDate { get; set; }
 }
 
@@ -243,6 +263,8 @@ public class UpdateGoalRequest
     public string? Title { get; set; }
     public string? Description { get; set; }
     public string? Type { get; set; }
+    public decimal? TargetValue { get; set; }
+    public string? Unit { get; set; }
     public DateTime? TargetDate { get; set; }
     public string? Status { get; set; }
 }

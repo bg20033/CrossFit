@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { Button } from '../components/ui/button'
-import { UserRole } from '../types'
+import { getApiErrorMessage } from '../utils/api'
 
 type Mode = 'login' | 'register'
 
@@ -14,9 +14,9 @@ export default function Auth({ initialMode = 'login' }: { initialMode?: Mode }) 
   const [form, setForm] = useState({
     name: '',
     email: '',
+    phone: '',
     password: '',
     confirmPassword: '',
-    role: 'client' as UserRole,
   })
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
@@ -49,22 +49,23 @@ export default function Auth({ initialMode = 'login' }: { initialMode?: Mode }) 
       if (isLogin) {
         await login(form.email, form.password)
       } else {
-        await register({ name: form.name, email: form.email, password: form.password, role: form.role })
+        await register({ name: form.name, email: form.email, password: form.password, role: 'client', phone: form.phone || undefined })
       }
       navigate('/dashboard')
-    } catch (err: any) {
-      setError(err.response?.data?.message || (isLogin ? 'Kyçja dështoi' : 'Regjistrimi dështoi'))
+    } catch (err) {
+      setError(getApiErrorMessage(err, isLogin ? 'Kyçja dështoi' : 'Regjistrimi dështoi'))
     } finally {
       setLoading(false)
     }
   }
 
   return (
-    <div className="flex w-full items-center justify-center bg-gray-50 px-4 py-16 min-h-[80vh]">
+    <div className="flex w-full items-center justify-center bg-canvas px-4 py-16 min-h-[80vh]">
       <div className="w-full max-w-md">
         <div className="mb-6 flex flex-col items-center text-center">
-          <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-coral-500 text-2xl text-white">💪</span>
-          <h1 className="mt-3 text-2xl font-bold text-gray-900">
+          <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-gray-900 font-mono text-lg font-bold text-white">SU</span>
+          <p className="label-mono mt-4">Stand Up CrossFit</p>
+          <h1 className="mt-1 text-2xl font-bold tracking-tight text-gray-900">
             {isLogin ? 'Mirë se u ktheve' : 'Krijo një llogari'}
           </h1>
           <p className="mt-1 text-sm text-gray-500">
@@ -72,14 +73,14 @@ export default function Auth({ initialMode = 'login' }: { initialMode?: Mode }) 
           </p>
         </div>
 
-        <div className="rounded-2xl border border-gray-100 bg-white p-6 shadow-sm md:p-8">
+        <div className="rounded-2xl border border-gray-200 bg-white p-6 md:p-8">
           {/* Toggle */}
           <div className="mb-6 grid grid-cols-2 gap-1 rounded-xl bg-gray-100 p-1">
             <button
               type="button"
               onClick={() => switchTo('login')}
               className={`rounded-lg py-2 text-sm font-semibold transition ${
-                isLogin ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'
+                isLogin ? 'bg-white text-gray-900' : 'text-gray-500 hover:text-gray-700'
               }`}
             >
               Kyçu
@@ -88,7 +89,7 @@ export default function Auth({ initialMode = 'login' }: { initialMode?: Mode }) 
               type="button"
               onClick={() => switchTo('register')}
               className={`rounded-lg py-2 text-sm font-semibold transition ${
-                !isLogin ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'
+                !isLogin ? 'bg-white text-gray-900' : 'text-gray-500 hover:text-gray-700'
               }`}
             >
               Regjistrohu
@@ -124,13 +125,16 @@ export default function Auth({ initialMode = 'login' }: { initialMode?: Mode }) 
 
             {!isLogin && (
               <div>
-                <label className="mb-1.5 block text-sm font-medium text-gray-700">Unë jam...</label>
-                <select name="role" value={form.role} onChange={change} className={inputClass}>
-                  <option value="client">Klient</option>
-                  <option value="trainer">Trajner</option>
-                  <option value="gym_owner">Pronar i Palestrës</option>
-                  <option value="staff">Staf / Recepsion</option>
-                </select>
+                <label className="mb-1.5 block text-sm font-medium text-gray-700">Telefoni (opsionale)</label>
+                <input
+                  type="tel"
+                  name="phone"
+                  autoComplete="tel"
+                  value={form.phone}
+                  onChange={change}
+                  placeholder="p.sh. 044 123 456"
+                  className={inputClass}
+                />
               </div>
             )}
 
@@ -143,6 +147,7 @@ export default function Auth({ initialMode = 'login' }: { initialMode?: Mode }) 
                 value={form.password}
                 onChange={change}
                 required
+                minLength={isLogin ? undefined : 8}
                 className={inputClass}
               />
             </div>
@@ -157,6 +162,7 @@ export default function Auth({ initialMode = 'login' }: { initialMode?: Mode }) 
                   value={form.confirmPassword}
                   onChange={change}
                   required
+                  minLength={8}
                   className={inputClass}
                 />
               </div>

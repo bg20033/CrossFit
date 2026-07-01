@@ -26,27 +26,36 @@ public class AuthController : ControllerBase
     }
 
     [EnableRateLimiting("auth")]
+    [AllowAnonymous]
     [HttpPost("register")]
     public async Task<IActionResult> Register([FromBody] RegisterRequest request)
     {
-        if (await _context.Users.AnyAsync(u => u.Email == request.Email))
+        var email = request.Email.Trim().ToLowerInvariant();
+        var name = request.Name.Trim();
+        if (await _context.Users.AnyAsync(u => u.Email == email))
         {
-            return BadRequest(new { message = "Email already exists" });
+            return BadRequest(new { message = "Unable to create account with the provided details" });
         }
 
         var passwordHash = BCrypt.Net.BCrypt.HashPassword(request.Password);
 
-        // Frontend sends roles like "gym_owner"; normalize to match the UserRole enum.
+        // Public signup is intentionally limited to client accounts. Staff,
+        // trainers, owners, and cashiers must be created by authorized admins.
         var normalizedRole = (request.Role ?? "").Replace("_", "");
         if (!Enum.TryParse<UserRole>(normalizedRole, ignoreCase: true, out var role))
         {
             return BadRequest(new { message = $"Invalid role '{request.Role}'" });
         }
+        if (role != UserRole.Client)
+        {
+            return StatusCode(StatusCodes.Status403Forbidden, new { message = "Only client self-registration is allowed" });
+        }
 
         var user = new User
         {
-            Email = request.Email,
-            Name = request.Name,
+            Email = email,
+            Name = name,
+            Phone = string.IsNullOrWhiteSpace(request.Phone) ? null : request.Phone.Trim(),
             PasswordHash = passwordHash,
             Role = role
         };
@@ -54,16 +63,26 @@ public class AuthController : ControllerBase
         _context.Users.Add(user);
         await _context.SaveChangesAsync();
 
+        _context.Clients.Add(new Client
+        {
+            UserId = user.Id,
+            MembershipType = "unassigned",
+            IsActive = false
+        });
+        await _context.SaveChangesAsync();
+
         return Ok(await BuildAuthResponseAsync(user, "Registration successful"));
     }
 
     [EnableRateLimiting("auth")]
+    [AllowAnonymous]
     [HttpPost("login")]
     public async Task<IActionResult> Login([FromBody] LoginRequest request)
     {
-        var user = await _context.Users.SingleOrDefaultAsync(u => u.Email == request.Email);
+        var email = request.Email.Trim().ToLowerInvariant();
+        var user = await _context.Users.SingleOrDefaultAsync(u => u.Email == email);
 
-        if (user == null || !BCrypt.Net.BCrypt.Verify(request.Password, user.PasswordHash))
+        if (user == null || !user.IsActive || !BCrypt.Net.BCrypt.Verify(request.Password, user.PasswordHash))
         {
             return Unauthorized(new { message = "Invalid email or password" });
         }
@@ -72,14 +91,15 @@ public class AuthController : ControllerBase
     }
 
     [EnableRateLimiting("auth")]
+    [AllowAnonymous]
     [HttpPost("refresh")]
     public async Task<IActionResult> Refresh([FromBody] RefreshRequest request)
     {
         var stored = await _context.RefreshTokens
             .Include(r => r.User)
-            .FirstOrDefaultAsync(r => r.Token == request.RefreshToken);
+            .FirstOrDefaultAsync(r => r.Token == HashRefreshToken(request.RefreshToken));
 
-        if (stored == null || !stored.IsActive)
+        if (stored == null || !stored.IsActive || !stored.User.IsActive)
             return Unauthorized(new { message = "Invalid or expired refresh token" });
 
         stored.RevokedAt = DateTime.UtcNow; // rotate: one-time use
@@ -91,7 +111,7 @@ public class AuthController : ControllerBase
     [HttpPost("logout")]
     public async Task<IActionResult> Logout([FromBody] RefreshRequest request)
     {
-        var stored = await _context.RefreshTokens.FirstOrDefaultAsync(r => r.Token == request.RefreshToken);
+        var stored = await _context.RefreshTokens.FirstOrDefaultAsync(r => r.Token == HashRefreshToken(request.RefreshToken));
         if (stored != null && stored.RevokedAt == null)
         {
             stored.RevokedAt = DateTime.UtcNow;
@@ -119,7 +139,7 @@ public class AuthController : ControllerBase
         var accessToken = GenerateJwtToken(user);
         var raw = Convert.ToBase64String(System.Security.Cryptography.RandomNumberGenerator.GetBytes(32));
         var days = int.TryParse(_configuration["JwtSettings:RefreshTokenDays"], out var d) ? d : 7;
-        _context.RefreshTokens.Add(new RefreshToken { UserId = user.Id, Token = raw, ExpiresAt = DateTime.UtcNow.AddDays(days) });
+        _context.RefreshTokens.Add(new RefreshToken { UserId = user.Id, Token = HashRefreshToken(raw), ExpiresAt = DateTime.UtcNow.AddDays(days) });
         await _context.SaveChangesAsync();
 
         return new
@@ -161,14 +181,15 @@ public class AuthController : ControllerBase
         var user = await _context.Users.FindAsync(userId);
         if (user == null) return NotFound();
 
-        if (!string.IsNullOrWhiteSpace(request.Email) && request.Email != user.Email)
+        var email = request.Email?.Trim().ToLowerInvariant();
+        if (!string.IsNullOrWhiteSpace(email) && email != user.Email)
         {
-            if (await _context.Users.AnyAsync(u => u.Email == request.Email && u.Id != userId))
+            if (await _context.Users.AnyAsync(u => u.Email == email && u.Id != userId))
                 return BadRequest(new { message = "Email already exists" });
-            user.Email = request.Email;
+            user.Email = email;
         }
         if (!string.IsNullOrWhiteSpace(request.Name))
-            user.Name = request.Name;
+            user.Name = request.Name.Trim();
 
         await _context.SaveChangesAsync();
         return Ok(new { id = user.Id, email = user.Email, name = user.Name, role = user.Role.ToString() });
@@ -189,6 +210,9 @@ public class AuthController : ControllerBase
             return BadRequest(new { message = "Fjalëkalimi aktual është gabim" });
 
         user.PasswordHash = BCrypt.Net.BCrypt.HashPassword(request.NewPassword);
+        var activeTokens = await _context.RefreshTokens.Where(r => r.UserId == userId && r.RevokedAt == null).ToListAsync();
+        foreach (var token in activeTokens)
+            token.RevokedAt = DateTime.UtcNow;
         await _context.SaveChangesAsync();
         return Ok(new { message = "Fjalëkalimi u ndryshua" });
     }
@@ -218,16 +242,24 @@ public class AuthController : ControllerBase
 
         return new JwtSecurityTokenHandler().WriteToken(token);
     }
+
+    private static string HashRefreshToken(string refreshToken)
+    {
+        var bytes = SHA256.HashData(Encoding.UTF8.GetBytes(refreshToken));
+        return Convert.ToBase64String(bytes);
+    }
 }
 
 public class RegisterRequest
 {
     [Required, EmailAddress, MaxLength(256)]
     public string Email { get; set; } = null!;
-    [Required, MinLength(6), MaxLength(128)]
+    [Required, MinLength(8), MaxLength(128)]
     public string Password { get; set; } = null!;
     [Required, MaxLength(120)]
     public string Name { get; set; } = null!;
+    [Phone, MaxLength(40)]
+    public string? Phone { get; set; }
     [Required, MaxLength(40)]
     public string Role { get; set; } = "client";
 }
@@ -252,7 +284,7 @@ public class ChangePasswordRequest
 {
     [Required, MaxLength(128)]
     public string CurrentPassword { get; set; } = null!;
-    [Required, MinLength(6), MaxLength(128)]
+    [Required, MinLength(8), MaxLength(128)]
     public string NewPassword { get; set; } = null!;
 }
 

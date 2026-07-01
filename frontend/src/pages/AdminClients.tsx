@@ -1,7 +1,9 @@
+import { Users } from 'lucide-react'
 import { useState, useEffect } from 'react'
 import { Button } from '../components/ui/button'
 import { useNotification } from '../contexts/NotificationContext'
-import api from '../utils/api'
+import api, { getApiErrorMessage } from '../utils/api'
+import { toDecimal } from '../utils/number'
 import { shortDate, eur } from '../utils/format'
 import {
   DashboardShell,
@@ -80,8 +82,8 @@ export default function AdminClients() {
       const params = search ? `?search=${encodeURIComponent(search)}` : ''
       const res = await api.get(`/clients${params}`)
       setClients(res.data.clients ?? [])
-    } catch {
-      setError('Ngarkimi i klientëve dështoi')
+    } catch (err) {
+      setError(getApiErrorMessage(err, 'Ngarkimi i klientëve dështoi'))
     } finally {
       setLoading(false)
     }
@@ -96,13 +98,13 @@ export default function AdminClients() {
     e.preventDefault()
     setError('')
     try {
-      await api.post('/clients/create', { ...form, membershipPrice: parseFloat(form.membershipPrice) })
+      await api.post('/clients/create', { ...form, membershipPrice: toDecimal(form.membershipPrice) })
       setShowForm(false)
       setForm({ ...empty, membershipType: plans[0]?.name ?? '', membershipPrice: String(plans[0]?.price ?? 0) })
       addNotification('Sukses', 'Klienti u krijua.', 'success')
       fetchClients()
-    } catch (err: any) {
-      setError(err.response?.data?.message || 'Krijimi i klientit dështoi')
+    } catch (err) {
+      setError(getApiErrorMessage(err, 'Krijimi i klientit dështoi'))
     }
   }
 
@@ -117,8 +119,8 @@ export default function AdminClients() {
     try {
       const res = await api.get(`/clients/${id}`)
       setDetail(res.data)
-    } catch {
-      addNotification('Gabim', 'Ngarkimi i klientit dështoi.', 'error')
+    } catch (err) {
+      addNotification('Gabim', getApiErrorMessage(err, 'Ngarkimi i klientit dështoi.'), 'error')
     }
   }
 
@@ -212,7 +214,7 @@ export default function AdminClients() {
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <Field label="Emri"><input name="name" value={form.name} onChange={change} required className={fieldCls} /></Field>
               <Field label="Email"><input type="email" name="email" value={form.email} onChange={change} required className={fieldCls} /></Field>
-              <Field label="Fjalëkalimi"><input type="password" name="password" value={form.password} onChange={change} required className={fieldCls} /></Field>
+              <Field label="Fjalëkalimi"><input type="password" name="password" value={form.password} onChange={change} required minLength={8} className={fieldCls} /></Field>
               <Field label="Pakoja e anëtarësimit">
                 {plans.length === 0 ? (
                   <input name="membershipType" value={form.membershipType} onChange={change} placeholder="Krijo pako te 'Pakot'" className={fieldCls} />
@@ -222,7 +224,7 @@ export default function AdminClients() {
                   </select>
                 )}
               </Field>
-              <Field label="Çmimi (€)"><input type="number" step="0.01" name="membershipPrice" value={form.membershipPrice} onChange={change} className={fieldCls} /></Field>
+              <Field label="Çmimi (€)"><input type="text" inputMode="decimal" name="membershipPrice" value={form.membershipPrice} onChange={change} className={fieldCls} /></Field>
             </div>
             <Button type="submit" className={primaryBtn}>Krijo klientin</Button>
           </form>
@@ -236,9 +238,34 @@ export default function AdminClients() {
         {loading ? (
           <p className="py-6 text-center text-sm text-gray-400">Duke ngarkuar…</p>
         ) : clients.length === 0 ? (
-          <EmptyState icon="👥" text="Ende s'ka klientë. Shto të parin me '+ Klient i ri'." />
+          <EmptyState icon={<Users className="h-5 w-5" />} text="Ende s'ka klientë. Shto të parin me '+ Klient i ri'." />
         ) : (
-          <div className="overflow-x-auto">
+          <>
+          {/* Mobile: cards */}
+          <div className="space-y-3 md:hidden">
+            {clients.map((c) => (
+              <button
+                key={c.id}
+                onClick={() => openDetail(c.id)}
+                className="block w-full rounded-xl border border-gray-200 p-4 text-left"
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="font-medium text-gray-800">{c.name}</p>
+                    <p className="truncate text-xs text-gray-400">{c.email}</p>
+                  </div>
+                  <Badge accent={c.isActive ? 'green' : 'gray'}>{c.isActive ? 'Aktiv' : 'Pasiv'}</Badge>
+                </div>
+                <div className="mt-3 flex items-center justify-between text-sm">
+                  <Badge accent="gray">{c.membershipType || '—'}</Badge>
+                  <span className="text-gray-500">Skadon: {shortDate(c.membershipExpiry)}</span>
+                </div>
+              </button>
+            ))}
+          </div>
+
+          {/* Desktop: table */}
+          <div className="hidden overflow-x-auto md:block">
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-gray-100 text-left text-xs uppercase tracking-wide text-gray-400">
@@ -267,6 +294,7 @@ export default function AdminClients() {
               </tbody>
             </table>
           </div>
+          </>
         )}
       </Panel>
 

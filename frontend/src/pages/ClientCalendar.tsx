@@ -1,7 +1,8 @@
+import { CalendarDays, Flame, Megaphone, TrendingUp } from 'lucide-react'
 import { useState, useEffect } from 'react'
 import { useAuth } from '../contexts/AuthContext'
 import api from '../utils/api'
-import { DashboardShell, DashboardHeader, StatCard, Panel, DayStrip, StreakBadge, WeeklyBars } from '../components/DashboardKit'
+import { DashboardShell, DashboardHeader, StatCard, Panel, DayStrip, StreakBadge, WeeklyBars, EmptyState, Badge } from '../components/DashboardKit'
 
 interface Day {
   date: string
@@ -19,10 +20,20 @@ interface Summary {
   currentStreak: number
   days: Day[]
 }
+interface GymNotice {
+  id: number
+  type: string
+  targetAudience: string
+  title: string
+  message: string
+  startsAt: string
+  endsAt?: string | null
+}
 
 const MONTHS = ['Janar', 'Shkurt', 'Mars', 'Prill', 'Maj', 'Qershor', 'Korrik', 'Gusht', 'Shtator', 'Tetor', 'Nëntor', 'Dhjetor']
 const WD = ['Hën', 'Mar', 'Mër', 'Enj', 'Pre', 'Sht', 'Die']
 const todayStr = new Date().toISOString().slice(0, 10)
+const NOTICE_TYPES: Record<string, string> = { announcement: 'Njoftim', closure: 'Mbyllje', reschedule: 'Shtyrje' }
 
 export default function ClientCalendar() {
   const { profileId } = useAuth()
@@ -30,6 +41,17 @@ export default function ClientCalendar() {
   const [cursor, setCursor] = useState({ year: now.getFullYear(), month: now.getMonth() + 1 })
   const [data, setData] = useState<Summary | null>(null)
   const [selected, setSelected] = useState<Day | null>(null)
+  const [notices, setNotices] = useState<GymNotice[]>([])
+
+  const downloadIcs = async () => {
+    const res = await api.get('/calendar/me.ics', { responseType: 'blob' })
+    const url = URL.createObjectURL(new Blob([res.data], { type: 'text/calendar' }))
+    const a = document.createElement('a')
+    a.href = url
+    a.download = 'standup-calendar.ics'
+    a.click()
+    URL.revokeObjectURL(url)
+  }
 
   useEffect(() => {
     if (profileId == null) return
@@ -38,6 +60,13 @@ export default function ClientCalendar() {
       .then((r) => setData(r.data))
       .catch(() => setData(null))
   }, [profileId, cursor])
+
+  useEffect(() => {
+    api
+      .get('/gymnotices?pageSize=8')
+      .then((r) => setNotices(r.data ?? []))
+      .catch(() => setNotices([]))
+  }, [])
 
   const byDate = new Map((data?.days ?? []).map((d) => [d.date, d]))
   const daysInMonth = new Date(cursor.year, cursor.month, 0).getDate()
@@ -76,8 +105,43 @@ export default function ClientCalendar() {
         badge="Klient"
         title="Kalendari im"
         subtitle="Sa herë ke ardhur dhe sa rregullt je."
-        right={(data?.currentStreak ?? 0) > 0 ? <StreakBadge days={data!.currentStreak} label="ditë" /> : undefined}
+        right={
+          <div className="flex items-center gap-2">
+            {(data?.currentStreak ?? 0) > 0 && <StreakBadge days={data!.currentStreak} label="ditë" />}
+            <button
+              onClick={downloadIcs}
+              className="rounded-lg border border-gray-200 px-3 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50"
+            >
+              ICS
+            </button>
+          </div>
+        }
       />
+
+      <Panel title="Njoftime për orarin" action={<Badge>{notices.length}</Badge>}>
+        {notices.length === 0 ? (
+          <EmptyState icon={<Megaphone className="h-5 w-5" />} text="S'ka njoftime aktive për momentin." />
+        ) : (
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+            {notices.map((n) => (
+              <div key={n.id} className="rounded-xl border border-gray-200 p-4">
+                <div className="mb-2 flex items-start justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-semibold text-gray-900">{n.title}</p>
+                    <p className="mt-1 text-xs text-gray-400">{NOTICE_TYPES[n.type] ?? n.type}</p>
+                  </div>
+                  {n.type === 'closure' && <Badge>Urgjente</Badge>}
+                </div>
+                <p className="text-sm text-gray-600">{n.message}</p>
+                <p className="mt-3 text-xs text-gray-400">
+                  Nga {new Date(n.startsAt).toLocaleString('sq-AL', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
+                  {n.endsAt ? ` deri ${new Date(n.endsAt).toLocaleString('sq-AL', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}` : ''}
+                </p>
+              </div>
+            ))}
+          </div>
+        )}
+      </Panel>
 
       <Panel title="Kjo javë">
         <DayStrip year={cursor.year} month={cursor.month} marked={markedDays} today={todayStr} />
@@ -89,10 +153,10 @@ export default function ClientCalendar() {
       </Panel>
 
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-        <StatCard icon="📅" label="Këtë muaj" value={data?.totalThisMonth ?? 0} sub={`${data?.attendedDaysThisMonth ?? 0} ditë`} />
-        <StatCard icon="🗓️" label="Këtë javë" value={data?.totalThisWeek ?? 0} />
-        <StatCard icon="🔥" label="Streak" value={`${data?.currentStreak ?? 0} ditë`} />
-        <StatCard icon="📈" label="Rregullsia" value={`${data?.attendanceRate ?? 0}%`} sub="këtë muaj" />
+        <StatCard icon={<CalendarDays className="h-5 w-5" />} label="Këtë muaj" value={data?.totalThisMonth ?? 0} sub={`${data?.attendedDaysThisMonth ?? 0} ditë`} />
+        <StatCard icon={<CalendarDays className="h-5 w-5" />} label="Këtë javë" value={data?.totalThisWeek ?? 0} />
+        <StatCard icon={<Flame className="h-5 w-5" />} label="Streak" value={`${data?.currentStreak ?? 0} ditë`} />
+        <StatCard icon={<TrendingUp className="h-5 w-5" />} label="Rregullsia" value={`${data?.attendanceRate ?? 0}%`} sub="këtë muaj" />
       </div>
 
       <Panel
@@ -126,7 +190,7 @@ export default function ClientCalendar() {
                 }`}
               >
                 <span className={att ? 'font-semibold' : ''}>{day}</span>
-                {att && <span className="text-[10px]">✓{att.count > 1 ? `×${att.count}` : ''}</span>}
+                {att && <span className="text-[10px]">{att.count > 1 ? `×${att.count}` : ''}</span>}
               </button>
             )
           })}

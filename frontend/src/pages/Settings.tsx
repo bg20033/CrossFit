@@ -1,9 +1,10 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Button } from '../components/ui/button'
 import { useAuth } from '../contexts/AuthContext'
 import { useNotification } from '../contexts/NotificationContext'
 import { roleLabel } from '../lib/roles'
 import api from '../utils/api'
+import { toDecimal } from '../utils/number'
 import { DashboardShell, DashboardHeader, Panel, Field, fieldCls, primaryBtn } from '../components/DashboardKit'
 
 export default function Settings() {
@@ -15,6 +16,39 @@ export default function Settings() {
 
   const [pw, setPw] = useState({ currentPassword: '', newPassword: '', confirm: '' })
   const [savingPw, setSavingPw] = useState(false)
+
+  const isAdmin = user?.role === 'admin' || user?.role === 'gym_owner'
+  const [gym, setGym] = useState({ openTime: '06:00', closeTime: '22:00', closedDays: '', holidayDates: '', brandName: '', brandColor: '#EE3A24', refundThreshold: '50' })
+  const [savingGym, setSavingGym] = useState(false)
+
+  useEffect(() => {
+    if (!isAdmin) return
+    api.get('/gymsettings').then((r) => {
+      const d = r.data || {}
+      setGym({
+        openTime: d.openTime ?? '06:00',
+        closeTime: d.closeTime ?? '22:00',
+        closedDays: d.closedDays ?? '',
+        holidayDates: d.holidayDates ?? '',
+        brandName: d.brandName ?? '',
+        brandColor: d.brandColor ?? '#EE3A24',
+        refundThreshold: String(d.refundThreshold ?? 50),
+      })
+    }).catch(() => {})
+  }, [isAdmin])
+
+  const saveGym = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setSavingGym(true)
+    try {
+      await api.put('/gymsettings', { ...gym, refundThreshold: toDecimal(gym.refundThreshold) || 0 })
+      addNotification('Sukses', 'Konfigurimi u ruajt.', 'success')
+    } catch (err: any) {
+      addNotification('Gabim', err.response?.data?.message || 'Ruajtja dështoi.', 'error')
+    } finally {
+      setSavingGym(false)
+    }
+  }
 
   const saveProfile = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -85,10 +119,10 @@ export default function Settings() {
               <input type="password" autoComplete="current-password" value={pw.currentPassword} onChange={(e) => setPw((p) => ({ ...p, currentPassword: e.target.value }))} required className={fieldCls} />
             </Field>
             <Field label="Fjalëkalimi i ri">
-              <input type="password" autoComplete="new-password" value={pw.newPassword} onChange={(e) => setPw((p) => ({ ...p, newPassword: e.target.value }))} required className={fieldCls} />
+              <input type="password" autoComplete="new-password" value={pw.newPassword} onChange={(e) => setPw((p) => ({ ...p, newPassword: e.target.value }))} required minLength={8} className={fieldCls} />
             </Field>
             <Field label="Konfirmo fjalëkalimin">
-              <input type="password" autoComplete="new-password" value={pw.confirm} onChange={(e) => setPw((p) => ({ ...p, confirm: e.target.value }))} required className={fieldCls} />
+              <input type="password" autoComplete="new-password" value={pw.confirm} onChange={(e) => setPw((p) => ({ ...p, confirm: e.target.value }))} required minLength={8} className={fieldCls} />
             </Field>
             <Button type="submit" disabled={savingPw} className={primaryBtn}>
               {savingPw ? 'Duke ruajtur…' : 'Ndrysho fjalëkalimin'}
@@ -104,6 +138,27 @@ export default function Settings() {
             Dil nga të gjitha pajisjet
           </Button>
         </Panel>
+
+        {isAdmin && (
+          <Panel title="Konfigurimi i palestrës" className="lg:col-span-2">
+            <form onSubmit={saveGym} className="space-y-4">
+              <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+                <Field label="Hapet (orë)"><input type="time" value={gym.openTime} onChange={(e) => setGym((g) => ({ ...g, openTime: e.target.value }))} className={fieldCls} /></Field>
+                <Field label="Mbyllet (orë)"><input type="time" value={gym.closeTime} onChange={(e) => setGym((g) => ({ ...g, closeTime: e.target.value }))} className={fieldCls} /></Field>
+                <Field label="Pragu i refund-it (€)"><input type="text" inputMode="decimal" value={gym.refundThreshold} onChange={(e) => setGym((g) => ({ ...g, refundThreshold: e.target.value }))} className={fieldCls} /></Field>
+                <Field label="Ngjyra e markës"><input type="color" value={gym.brandColor} onChange={(e) => setGym((g) => ({ ...g, brandColor: e.target.value }))} className={`${fieldCls} h-10 p-1`} /></Field>
+              </div>
+              <Field label="Emri i markës"><input value={gym.brandName} onChange={(e) => setGym((g) => ({ ...g, brandName: e.target.value }))} className={fieldCls} /></Field>
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <Field label="Ditë të mbyllura (0=Hën..6=Die, me presje)"><input value={gym.closedDays} onChange={(e) => setGym((g) => ({ ...g, closedDays: e.target.value }))} placeholder="p.sh. 6" className={fieldCls} /></Field>
+                <Field label="Festa / mbyllje (data me presje)"><input value={gym.holidayDates} onChange={(e) => setGym((g) => ({ ...g, holidayDates: e.target.value }))} placeholder="2026-12-25,2027-01-01" className={fieldCls} /></Field>
+              </div>
+              <Button type="submit" disabled={savingGym} className={primaryBtn}>
+                {savingGym ? 'Duke ruajtur…' : 'Ruaj konfigurimin'}
+              </Button>
+            </form>
+          </Panel>
+        )}
       </div>
     </DashboardShell>
   )

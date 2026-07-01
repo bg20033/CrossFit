@@ -1,3 +1,4 @@
+import { CalendarDays, CheckCircle, Dumbbell, Flame, QrCode, Target, Ticket, UtensilsCrossed } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { useAuth } from '../contexts/AuthContext'
 import api from '../utils/api'
@@ -68,22 +69,23 @@ export default function ClientDashboard() {
     <DashboardShell>
       <DashboardHeader
         badge="Klient"
-        title={`Mirë se erdhe, ${user?.name?.split(' ')[0] || 'Klient'} 🙌`}
+        title={`Mirë se erdhe, ${user?.name?.split(' ')[0] || 'Klient'}`}
         subtitle="Ndiq planin tënd, dietën dhe qëllimet e tua të fitnesit."
         right={att.streak > 0 ? <StreakBadge days={att.streak} label="ditë" /> : undefined}
       />
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-        <ActionCard variant="coral" emoji="💪" title="Stërvitja sot" subtitle={`${counts.workouts} plane aktive`} cta="Hap planin" to="/workouts" />
-        <ActionCard variant="purple" emoji="🍽️" title="Dieta ime" subtitle={`${counts.diets} plane ushqimi`} cta="Shiko dietën" to="/diet" />
-        <ActionCard variant="teal" emoji="🎯" title="Qëllimet" subtitle={`${activeGoals.length} aktive`} cta="Ndiq progresin" to="/goals" />
+        <ActionCard variant="coral" emoji={<Dumbbell className="h-5 w-5" />} title="Stërvitja sot" subtitle={`${counts.workouts} plane aktive`} cta="Hap planin" to="/workouts" />
+        <ActionCard variant="purple" emoji={<UtensilsCrossed className="h-5 w-5" />} title="Dieta ime" subtitle={`${counts.diets} plane ushqimi`} cta="Shiko dietën" to="/diet" />
+        <ActionCard variant="dark" emoji={<Ticket className="h-5 w-5" />} title="Anëtarësimi" subtitle="Statusi & rinovimi" cta="Shiko detajet" to="/package" />
+        <ActionCard variant="teal" emoji={<Target className="h-5 w-5" />} title="Qëllimet" subtitle={`${activeGoals.length} aktive`} cta="Ndiq progresin" to="/goals" />
       </div>
 
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-        <MetricTile icon="🔥" label="Streak aktual" value={loading ? '…' : `${att.streak} ditë`} done={att.streak > 0} />
-        <MetricTile icon="📅" label="Vizita këtë javë" value={loading ? '…' : att.week} />
-        <MetricTile icon="🗓️" label="Vizita këtë muaj" value={loading ? '…' : att.month} />
-        <MetricTile icon="✅" label="Anëtarësimi" value="Aktiv" sub="Status" done />
+        <MetricTile icon={<Flame className="h-5 w-5" />} label="Streak aktual" value={loading ? '…' : `${att.streak} ditë`} done={att.streak > 0} />
+        <MetricTile icon={<CalendarDays className="h-5 w-5" />} label="Vizita këtë javë" value={loading ? '…' : att.week} />
+        <MetricTile icon={<CalendarDays className="h-5 w-5" />} label="Vizita këtë muaj" value={loading ? '…' : att.month} />
+        <MetricTile icon={<CheckCircle className="h-5 w-5" />} label="Anëtarësimi" value="Aktiv" sub="Status" done />
       </div>
 
       <Panel title="Rregullsia ime">
@@ -99,8 +101,8 @@ export default function ClientDashboard() {
               <p className="text-xs text-gray-400">këtë muaj</p>
             </div>
             <div>
-              <p className="text-3xl font-bold text-gray-900">{att.streak}🔥</p>
-              <p className="text-xs text-gray-400">streak (ditë)</p>
+              <p className="text-3xl font-bold text-gray-900">{att.streak}</p>
+              <p className="text-xs text-gray-400">vazhdimësi (ditë)</p>
             </div>
           </div>
         </div>
@@ -110,11 +112,12 @@ export default function ClientDashboard() {
       </Panel>
 
       <Panel title="Aksione të shpejta">
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <QuickAction to="/workouts" icon="💪" label="Ushtrimet e mia" accent="purple" />
-          <QuickAction to="/diet" icon="🍽️" label="Dieta ime" accent="orange" />
-          <QuickAction to="/goals" icon="🎯" label="Qëllimet" accent="blue" />
-          <QuickAction to="/rental" icon="🏟️" label="Rezervo hapësirë" accent="teal" />
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+          <QuickAction to="/qr-card" icon={<QrCode className="h-5 w-5" />} label="Kartela QR" />
+          <QuickAction to="/workouts" icon={<Dumbbell className="h-5 w-5" />} label="Ushtrimet e mia" accent="purple" />
+          <QuickAction to="/diet" icon={<UtensilsCrossed className="h-5 w-5" />} label="Dieta ime" accent="orange" />
+          <QuickAction to="/package" icon={<Ticket className="h-5 w-5" />} label="Anëtarësimi" />
+          <QuickAction to="/goals" icon={<Target className="h-5 w-5" />} label="Qëllimet" accent="blue" />
         </div>
       </Panel>
 
@@ -122,7 +125,7 @@ export default function ClientDashboard() {
         {loading ? (
           <p className="py-6 text-center text-sm text-gray-400">Duke ngarkuar…</p>
         ) : goals.length === 0 ? (
-          <EmptyState icon="🎯" text="Ende s'ke qëllime. Trajneri yt mund të caktojë një, ose shtoji te Qëllimet." />
+          <EmptyState icon={<Target className="h-5 w-5" />} text="Ende s'ke qëllime. Trajneri yt mund të caktojë një, ose shtoji te Qëllimet." />
         ) : (
           <div className="space-y-3">
             {goals.slice(0, 6).map((g) => {

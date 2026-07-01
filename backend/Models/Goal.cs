@@ -7,6 +7,8 @@ public class Goal
     public string Title { get; set; } = null!;
     public string Description { get; set; } = string.Empty;
     public string Type { get; set; } = string.Empty; // weight_loss, muscle_gain, strength, etc.
+    public decimal? TargetValue { get; set; }          // where the client aims to reach (e.g. 75)
+    public string Unit { get; set; } = string.Empty;   // kg, reps, min, % …
     public DateTime TargetDate { get; set; }
     public string Status { get; set; } = "in_progress"; // in_progress, completed, abandoned
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;

@@ -1,7 +1,7 @@
 import { NavLink, Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../../contexts/AuthContext'
 import { roleLabel } from '../../lib/roles'
-import { navForRole } from './navItems'
+import { navForRole, LogOut } from './navItems'
 
 function initials(name?: string): string {
   if (!name) return 'U'
@@ -12,6 +12,7 @@ function initials(name?: string): string {
     .join('')
     .toUpperCase()
 }
+
 
 function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
   const { user, logout } = useAuth()
@@ -29,32 +30,35 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
       <Link
         to="/dashboard"
         onClick={onNavigate}
-        className="flex items-center gap-2 px-6 py-5 text-lg font-bold text-gray-900"
+        className="flex items-center gap-2.5 px-6 py-5 font-display text-lg font-bold tracking-tight text-gray-900"
       >
-        <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-coral-500 text-xl text-white">💪</span>
-        StandUp
+        <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-gray-900 font-mono text-sm font-bold text-white">SU</span>
+        Stand Up<span className="text-coral-500">.</span>
       </Link>
 
       {/* Nav */}
       <nav className="flex-1 space-y-1 px-3">
-        {items.map((item) => (
-          <NavLink
-            key={item.to}
-            to={item.to}
-            onClick={onNavigate}
-            end={item.to === '/dashboard'}
-            className={({ isActive }) =>
-              `flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition ${
-                isActive
-                  ? 'bg-coral-500 text-white'
-                  : 'text-gray-600 hover:bg-coral-50 hover:text-coral-700'
-              }`
-            }
-          >
-            <span className="text-lg">{item.icon}</span>
-            {item.label}
-          </NavLink>
-        ))}
+        {items.map((item) => {
+          const Icon = item.icon
+          return (
+            <NavLink
+              key={item.to}
+              to={item.to}
+              onClick={onNavigate}
+              end={item.to === '/dashboard'}
+              className={({ isActive }) =>
+                `flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition ${
+                  isActive
+                    ? 'bg-coral-500 text-white'
+                    : 'text-gray-600 hover:bg-coral-50 hover:text-coral-700'
+                }`
+              }
+            >
+              <Icon className="h-5 w-5 shrink-0" />
+              {item.label}
+            </NavLink>
+          )
+        })}
       </nav>
 
       {/* User */}
@@ -72,7 +76,7 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
           onClick={handleLogout}
           className="mt-1 flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-gray-600 transition hover:bg-gray-100 hover:text-gray-900"
         >
-          <span className="text-lg">⎋</span>
+          <LogOut className="h-5 w-5 shrink-0" />
           Dil
         </button>
       </div>

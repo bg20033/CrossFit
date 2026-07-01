@@ -42,7 +42,7 @@ dotnet ef database update
 dotnet run
 ```
 
-**Backend do të nisë në:** `http://localhost:5000`
+**Backend do të nisë në:** `http://localhost:5050`
 
 ---
 
@@ -132,17 +132,9 @@ POST /api/staff/{id}/calculate-salary      - Llogarit rroga
 
 ---
 
-## 🔐 Test Credentials
+## 🔐 Local Admin
 
-### **Admin User** (Manual create në database)
-```sql
--- Shënojë në DbContext me seed data më vonë
-Email: admin@standup.com
-Password: Admin123!
-Role: Admin
-```
-
-**Për tani:** Duhet të krijohet manualisht përmes Register page, pastaj përditeso role në database.
+Krijoje një përdorues real lokal përmes Register page dhe caktoja rolin sipas nevojës në database lokale.
 
 ---
 
@@ -175,7 +167,7 @@ Role: Admin
 
 ### **2. Shto Kategori Financiare**
 ```bash
-curl -X POST http://localhost:5000/api/finance/add-category \
+curl -X POST http://localhost:5050/api/finance/add-category \
   -H "Authorization: Bearer YOUR_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
