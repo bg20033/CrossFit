@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using StandUpFitness.Data;
 using StandUpFitness.Models;
+using StandUpFitness.Services;
 
 namespace StandUpFitness.Controllers;
 
@@ -19,10 +20,12 @@ namespace StandUpFitness.Controllers;
 public class TrainerPaymentsController : ControllerBase
 {
     private readonly FitnessContext _context;
+    private readonly IFinanceService _financeService;
 
-    public TrainerPaymentsController(FitnessContext context)
+    public TrainerPaymentsController(FitnessContext context, IFinanceService financeService)
     {
         _context = context;
+        _financeService = financeService;
     }
 
     // GET: api/trainerpayments?year=2026&month=6
@@ -198,24 +201,21 @@ public class TrainerPaymentsController : ControllerBase
         if (commission.Status == "paid") return BadRequest(new { message = "Already paid" });
         if (commission.Status == "cancelled") return BadRequest(new { message = "Commission is cancelled" });
 
-        var category = await GetOrCreateCommissionCategoryAsync();
+        var userId = User.CurrentUserId();
 
-        var finance = new Finance
-        {
-            Type = "expense",
-            CategoryId = category.Id,
-            Amount = commission.TotalAmount,
-            Description = $"Komision trajneri — {commission.Trainer.User.Name} ({commission.Year}-{commission.Month:D2})",
-            PaymentMethod = request?.PaymentMethod ?? "cash",
-            TransactionDate = DateTime.UtcNow,
-            Status = "completed"
-        };
-        _context.Finances.Add(finance);
-        await _context.SaveChangesAsync();
+        var finance = await _financeService.RecordExpenseAsync(
+            FinanceService.TrainerCommissions,
+            commission.TotalAmount,
+            $"Komision trajneri — {commission.Trainer.User.Name} ({commission.Year}-{commission.Month:D2})",
+            request?.PaymentMethod ?? "cash",
+            userId);
 
         commission.Status = "paid";
         commission.PaidDate = DateTime.UtcNow;
-        commission.FinanceId = finance.Id;
+        // Navigation instead of FinanceId: EF wires the FK, letting expense +
+        // status flip commit in ONE SaveChanges (previously two — a crash in
+        // between left an expense booked with the commission still pending).
+        commission.Finance = finance;
         commission.UpdatedAt = DateTime.UtcNow;
         await _context.SaveChangesAsync();
 
@@ -235,24 +235,6 @@ public class TrainerPaymentsController : ControllerBase
         return Ok(new { message = "Commission cancelled" });
     }
 
-    private async Task<FinanceCategory> GetOrCreateCommissionCategoryAsync()
-    {
-        var cat = await _context.FinanceCategories
-            .FirstOrDefaultAsync(c => c.Name == "Trainer Commissions" && c.Type == "expense");
-        if (cat != null) return cat;
-
-        cat = new FinanceCategory
-        {
-            Name = "Trainer Commissions",
-            Type = "expense",
-            Description = "Komisionet mujore të trajnerëve",
-            IsSystem = true,
-            IsActive = true
-        };
-        _context.FinanceCategories.Add(cat);
-        await _context.SaveChangesAsync();
-        return cat;
-    }
 }
 
 public class CalculateCommissionRequest

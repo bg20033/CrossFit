@@ -1,8 +1,8 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Memory;
 using System.ComponentModel.DataAnnotations;
-using System.Security.Claims;
 using StandUpFitness.Data;
 using StandUpFitness.Models;
 using StandUpFitness.Services;
@@ -15,27 +15,27 @@ namespace StandUpFitness.Controllers;
 public class RolesController : ControllerBase
 {
     private readonly FitnessContext _context;
+    private readonly IMemoryCache _cache;
 
-    public RolesController(FitnessContext context)
+    public RolesController(FitnessContext context, IMemoryCache cache)
     {
         _context = context;
+        _cache = cache;
     }
 
-    private int? CurrentUserId()
-    {
-        var claim = User.FindFirst(ClaimTypes.NameIdentifier);
-        return int.TryParse(claim?.Value, out var id) ? id : null;
-    }
-
-    [Authorize(Policy = "AdminOnly")]
+    [Authorize(Policy = "RolesManage")]
     [HttpGet]
     public async Task<IActionResult> GetRoles()
     {
-        var roles = await _context.DynamicRoles
+        var roleRows = await _context.DynamicRoles
             .Include(r => r.Permissions)
                 .ThenInclude(rp => rp.Permission)
+            .AsNoTracking()
+            .AsSplitQuery()
             .OrderBy(r => r.Name)
-            .Select(r => new
+            .ToListAsync();
+
+        var roles = roleRows.Select(r => new
             {
                 r.Id,
                 r.Key,
@@ -43,14 +43,14 @@ public class RolesController : ControllerBase
                 r.Description,
                 r.IsSystem,
                 r.IsActive,
-                Permissions = r.Permissions.Select(p => p.Permission.Key).OrderBy(k => k)
+                Permissions = r.Permissions.Select(p => p.Permission.Key).OrderBy(k => k).ToList()
             })
-            .ToListAsync();
+            .ToList();
 
         return Ok(roles);
     }
 
-    [Authorize(Policy = "AdminOnly")]
+    [Authorize(Policy = "RolesManage")]
     [HttpGet("permissions")]
     public async Task<IActionResult> GetPermissions()
     {
@@ -63,44 +63,85 @@ public class RolesController : ControllerBase
         return Ok(permissions);
     }
 
-    [Authorize(Policy = "AdminOnly")]
+    [Authorize(Policy = "RolesManage")]
     [HttpGet("users")]
     public async Task<IActionResult> GetUsersWithRoles()
     {
         var users = await _context.Users
+            .AsNoTracking()
             .OrderBy(u => u.Name)
             .Select(u => new
             {
                 u.Id,
                 u.Name,
                 u.Email,
-                BaselineRole = u.Role.ToString(),
-                DynamicRoles = _context.UserRoleAssignments
-                    .Where(ur => ur.UserId == u.Id)
-                    .Select(ur => new { ur.DynamicRole.Id, ur.DynamicRole.Key, ur.DynamicRole.Name })
-                    .ToList()
+                BaselineRole = u.Role.ToString()
             })
             .ToListAsync();
-        return Ok(users);
+
+        var userIds = users.Select(u => u.Id).ToList();
+        var assignments = await _context.UserRoleAssignments
+            .AsNoTracking()
+            .Where(ur => userIds.Contains(ur.UserId))
+            .Select(ur => new AssignedRoleRow(
+                ur.UserId,
+                ur.DynamicRole.Id,
+                ur.DynamicRole.Key,
+                ur.DynamicRole.Name))
+            .ToListAsync();
+
+        var rolesByUser = assignments
+            .GroupBy(a => a.UserId)
+            .ToDictionary(
+                g => g.Key,
+                g => g.Select(a => new AssignedRoleDto(a.Id, a.Key, a.Name))
+                    .OrderBy(r => r.Name)
+                    .ToList());
+
+        var response = users.Select(u => new
+            {
+                u.Id,
+                u.Name,
+                u.Email,
+                u.BaselineRole,
+                DynamicRoles = rolesByUser.TryGetValue(u.Id, out var assigned)
+                    ? assigned
+                    : new List<AssignedRoleDto>()
+            })
+            .ToList();
+
+        return Ok(response);
     }
 
     [HttpGet("me/permissions")]
     public async Task<IActionResult> MyPermissions()
     {
-        var userId = CurrentUserId();
+        var userId = User.CurrentUserId();
         if (userId == null) return Unauthorized();
 
-        var keys = await _context.UserRoleAssignments
+        var userRole = await _context.Users
+            .Where(u => u.Id == userId.Value && u.IsActive)
+            .Select(u => u.Role.ToString())
+            .FirstOrDefaultAsync();
+        if (userRole == null) return Unauthorized();
+
+        var keys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        if (RbacCatalog.BaselinePermissions.TryGetValue(userRole, out var baseline))
+        {
+            foreach (var key in baseline) keys.Add(key);
+        }
+
+        var dynamicKeys = await _context.UserRoleAssignments
             .Where(ur => ur.UserId == userId && ur.DynamicRole.IsActive)
             .SelectMany(ur => ur.DynamicRole.Permissions.Select(rp => rp.Permission.Key))
             .Distinct()
-            .OrderBy(k => k)
             .ToListAsync();
+        foreach (var key in dynamicKeys) keys.Add(key);
 
-        return Ok(new { permissions = keys });
+        return Ok(new { permissions = keys.OrderBy(k => k).ToList() });
     }
 
-    [Authorize(Policy = "AdminOnly")]
+    [Authorize(Policy = "RolesManage")]
     [HttpPost]
     public async Task<IActionResult> CreateRole([FromBody] RoleRequest request)
     {
@@ -124,7 +165,7 @@ public class RolesController : ControllerBase
         return Ok(new { message = "Role created", id = role.Id, key = role.Key });
     }
 
-    [Authorize(Policy = "AdminOnly")]
+    [Authorize(Policy = "RolesManage")]
     [HttpPut("{id:int}")]
     public async Task<IActionResult> UpdateRole(int id, [FromBody] RoleRequest request)
     {
@@ -142,7 +183,7 @@ public class RolesController : ControllerBase
         return Ok(new { message = "Role updated" });
     }
 
-    [Authorize(Policy = "AdminOnly")]
+    [Authorize(Policy = "RolesManage")]
     [HttpPost("{id:int}/assign")]
     public async Task<IActionResult> AssignRole(int id, [FromBody] AssignRoleRequest request)
     {
@@ -156,11 +197,13 @@ public class RolesController : ControllerBase
         {
             _context.UserRoleAssignments.Add(new UserRoleAssignment { UserId = request.UserId, DynamicRoleId = id });
             await _context.SaveChangesAsync();
+            // Evict the cached permission set so the change applies on the next request.
+            _cache.Remove($"{PermissionClaimsTransformation.CacheKeyPrefix}{request.UserId}");
         }
         return Ok(new { message = "Role assigned" });
     }
 
-    [Authorize(Policy = "AdminOnly")]
+    [Authorize(Policy = "RolesManage")]
     [HttpDelete("{id:int}/assign/{userId:int}")]
     public async Task<IActionResult> UnassignRole(int id, int userId)
     {
@@ -168,6 +211,7 @@ public class RolesController : ControllerBase
         if (row == null) return NotFound();
         _context.UserRoleAssignments.Remove(row);
         await _context.SaveChangesAsync();
+        _cache.Remove($"{PermissionClaimsTransformation.CacheKeyPrefix}{userId}");
         return Ok(new { message = "Role removed from user" });
     }
 
@@ -194,6 +238,9 @@ public class RolesController : ControllerBase
 
     private static string NormalizeKey(string raw) =>
         raw.Trim().ToLowerInvariant().Replace(" ", "_").Replace("-", "_");
+
+    private sealed record AssignedRoleRow(int UserId, int Id, string Key, string Name);
+    private sealed record AssignedRoleDto(int Id, string Key, string Name);
 }
 
 public class RoleRequest

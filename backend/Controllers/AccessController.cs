@@ -11,22 +11,18 @@ namespace StandUpFitness.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
-[Authorize(Policy = "Desk")]
+[Authorize(Policy = "AccessScan")]
 public class AccessController : ControllerBase
 {
     private readonly FitnessContext _context;
+    private readonly IGymTimeService _gymTime;
     private static readonly System.Text.RegularExpressions.Regex QrTokenPattern =
         new(@"SUCF-[A-Z0-9-]{8,}", System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.Compiled);
 
-    public AccessController(FitnessContext context)
+    public AccessController(FitnessContext context, IGymTimeService gymTime)
     {
         _context = context;
-    }
-
-    private int? CurrentUserId()
-    {
-        var claim = User.FindFirst(ClaimTypes.NameIdentifier);
-        return int.TryParse(claim?.Value, out var id) ? id : null;
+        _gymTime = gymTime;
     }
 
     private static string NormalizeQrToken(string input)
@@ -60,8 +56,13 @@ public class AccessController : ControllerBase
         var token = NormalizeQrToken(request.Token);
         if (string.IsNullOrWhiteSpace(token))
             return BadRequest(new { message = "Tokeni i QR mungon." });
-        var now = DateTime.Now;
-        var scannerId = CurrentUserId();
+        // Schedule slots are gym wall-clock times, so the verdict is computed in
+        // the gym's timezone — DateTime.Now was wrong the moment the API ran on a
+        // UTC server (an 18:00 class would reject check-ins at 18:00 local).
+        // Persisted timestamps stay UTC.
+        var now = _gymTime.LocalNow;
+        var utcNow = DateTime.UtcNow;
+        var scannerId = User.CurrentUserId();
 
         var member = await _context.Clients
             .Include(c => c.User)
@@ -93,7 +94,7 @@ public class AccessController : ControllerBase
                 savedLog = new AttendanceLog
                 {
                     ClientId = member.Id,
-                    CheckInTime = now,
+                    CheckInTime = utcNow,
                     CheckInMethod = "qr",
                     Decision = verdict.Decision,
                     GroupId = groupNow?.Id,
@@ -103,7 +104,7 @@ public class AccessController : ControllerBase
             }
             else if (verdict.Action == "exit" && activeLog != null)
             {
-                activeLog.CheckOutTime = now;
+                activeLog.CheckOutTime = utcNow;
                 activeLog.Decision = "exit";
                 activeLog.ScannedById = scannerId;
                 savedLog = activeLog;
@@ -113,7 +114,7 @@ public class AccessController : ControllerBase
                 savedLog = new AttendanceLog
                 {
                     ClientId = member.Id,
-                    CheckInTime = now,
+                    CheckInTime = utcNow,
                     CheckInMethod = "qr",
                     Decision = verdict.Decision,
                     DenyReason = verdict.Reason,
@@ -160,8 +161,6 @@ public class AccessController : ControllerBase
     {
         var active = await _context.AttendanceLogs
             .Where(a => a.CheckOutTime == null && a.Decision == "granted")
-            .Include(a => a.Client)
-                .ThenInclude(c => c.User)
             .OrderByDescending(a => a.CheckInTime)
             .Select(a => new
             {
@@ -173,9 +172,13 @@ public class AccessController : ControllerBase
             })
             .ToListAsync();
 
-        var today = DateTime.Now.Date;
-        var entriesToday = await _context.AttendanceLogs.CountAsync(a => a.CheckInTime >= today && a.Decision == "granted");
-        var denialsToday = await _context.AttendanceLogs.CountAsync(a => a.CheckInTime >= today && a.Decision == "denied");
+        // "Today" is the gym's local day converted to a UTC range — timestamps
+        // are stored in UTC.
+        var (todayStartUtc, todayEndUtc) = _gymTime.LocalDayUtcRange();
+        var entriesToday = await _context.AttendanceLogs.CountAsync(a =>
+            a.CheckInTime >= todayStartUtc && a.CheckInTime < todayEndUtc && a.Decision == "granted");
+        var denialsToday = await _context.AttendanceLogs.CountAsync(a =>
+            a.CheckInTime >= todayStartUtc && a.CheckInTime < todayEndUtc && a.Decision == "denied");
 
         return Ok(new
         {

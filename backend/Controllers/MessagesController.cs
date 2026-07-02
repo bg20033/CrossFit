@@ -2,9 +2,9 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using System.ComponentModel.DataAnnotations;
-using System.Security.Claims;
 using StandUpFitness.Data;
 using StandUpFitness.Models;
+using StandUpFitness.Services;
 
 namespace StandUpFitness.Controllers;
 
@@ -14,22 +14,87 @@ namespace StandUpFitness.Controllers;
 public class MessagesController : ControllerBase
 {
     private readonly FitnessContext _context;
+    private static readonly UserRole[] StaffContactRoles =
+        [UserRole.Admin, UserRole.GymOwner, UserRole.Staff, UserRole.Cashier];
 
     public MessagesController(FitnessContext context)
     {
         _context = context;
     }
 
-    private int? CurrentUserId()
+    private async Task<IQueryable<User>> ContactQueryAsync(int userId)
     {
-        var claim = User.FindFirst(ClaimTypes.NameIdentifier);
-        return int.TryParse(claim?.Value, out var id) ? id : null;
+        var baseQuery = _context.Users.Where(u => u.Id != userId && u.IsActive);
+
+        if (User.CanManageCoreScope(includeStaff: true, includeCashier: true))
+            return baseQuery;
+
+        if (User.IsInRole(nameof(UserRole.Trainer)))
+        {
+            var trainerId = await _context.CurrentCoreTrainerIdAsync(User);
+            if (trainerId == null) return baseQuery.Where(_ => false);
+
+            return baseQuery.Where(u =>
+                StaffContactRoles.Contains(u.Role) ||
+                _context.Clients.Any(c =>
+                    c.UserId == u.Id &&
+                    (c.TrainerId == trainerId.Value || c.Groups.Any(g => g.TrainerId == trainerId.Value))));
+        }
+
+        if (User.IsInRole(nameof(UserRole.Client)))
+        {
+            var directTrainerUserIds = await _context.Clients
+                .Where(c => c.UserId == userId && c.TrainerId != null)
+                .Select(c => c.Trainer!.UserId)
+                .ToListAsync();
+            var groupTrainerUserIds = await _context.Clients
+                .Where(c => c.UserId == userId)
+                .SelectMany(c => c.Groups.Select(g => g.Trainer.UserId))
+                .ToListAsync();
+            var trainerUserIds = directTrainerUserIds.Concat(groupTrainerUserIds).Distinct().ToArray();
+
+            return baseQuery.Where(u => StaffContactRoles.Contains(u.Role) || trainerUserIds.Contains(u.Id));
+        }
+
+        if (User.IsInRole(nameof(UserRole.TrainerTenant)))
+        {
+            var tenantId = await _context.TrainerTenants
+                .Where(t => t.UserId == userId)
+                .Select(t => (int?)t.Id)
+                .FirstOrDefaultAsync();
+            if (tenantId == null) return baseQuery.Where(_ => false);
+
+            return baseQuery.Where(u =>
+                StaffContactRoles.Contains(u.Role) ||
+                _context.TenantClients.Any(c => c.TrainerTenantId == tenantId.Value && c.UserId == u.Id));
+        }
+
+        if (User.IsInRole(nameof(UserRole.TenantClient)))
+        {
+            var tenantTrainerUserId = await _context.TenantClients
+                .Where(c => c.UserId == userId)
+                .Select(c => (int?)c.TrainerTenant.UserId)
+                .FirstOrDefaultAsync();
+
+            return baseQuery.Where(u =>
+                StaffContactRoles.Contains(u.Role) ||
+                (tenantTrainerUserId != null && u.Id == tenantTrainerUserId.Value));
+        }
+
+        return baseQuery.Where(u => StaffContactRoles.Contains(u.Role));
+    }
+
+    private async Task<bool> CanMessageUserAsync(int userId, int otherUserId)
+    {
+        if (userId == otherUserId) return false;
+        var query = await ContactQueryAsync(userId);
+        return await query.AnyAsync(u => u.Id == otherUserId);
     }
 
     [HttpGet("inbox")]
     public async Task<IActionResult> Inbox()
     {
-        var userId = CurrentUserId();
+        var userId = User.CurrentUserId();
         if (userId == null) return Unauthorized();
 
         var rows = await _context.DirectMessages
@@ -65,11 +130,10 @@ public class MessagesController : ControllerBase
     [HttpGet("contacts")]
     public async Task<IActionResult> Contacts([FromQuery] string? q = null)
     {
-        var userId = CurrentUserId();
+        var userId = User.CurrentUserId();
         if (userId == null) return Unauthorized();
 
-        var query = _context.Users
-            .Where(u => u.Id != userId && u.IsActive);
+        var query = await ContactQueryAsync(userId.Value);
 
         if (!string.IsNullOrWhiteSpace(q))
         {
@@ -95,8 +159,9 @@ public class MessagesController : ControllerBase
     [HttpGet("thread/{otherUserId:int}")]
     public async Task<IActionResult> Thread(int otherUserId)
     {
-        var userId = CurrentUserId();
+        var userId = User.CurrentUserId();
         if (userId == null) return Unauthorized();
+        if (!await CanMessageUserAsync(userId.Value, otherUserId)) return Forbid();
 
         var messages = await _context.DirectMessages
             .Where(m =>
@@ -127,10 +192,10 @@ public class MessagesController : ControllerBase
     [HttpPost]
     public async Task<IActionResult> Send([FromBody] SendMessageRequest request)
     {
-        var userId = CurrentUserId();
+        var userId = User.CurrentUserId();
         if (userId == null) return Unauthorized();
-        if (!await _context.Users.AnyAsync(u => u.Id == request.ReceiverUserId))
-            return NotFound("Receiver not found");
+        if (!await CanMessageUserAsync(userId.Value, request.ReceiverUserId))
+            return Forbid();
 
         var message = new DirectMessage
         {

@@ -1,7 +1,8 @@
-import { Dumbbell } from 'lucide-react'
+import { Dumbbell, Trash2 } from 'lucide-react'
 import { useState, useEffect } from 'react'
 import { Button } from '../components/ui/button'
 import { useNotification } from '../contexts/NotificationContext'
+import TeamTabs from '../components/app/TeamTabs'
 import api from '../utils/api'
 import { toDecimal } from '../utils/number'
 import { eur } from '../utils/format'
@@ -69,6 +70,17 @@ export default function AdminTrainers() {
   const change = (e: React.ChangeEvent<HTMLInputElement>) =>
     setForm((p) => ({ ...p, [e.target.name]: e.target.value }))
 
+  const deactivate = async (trainer: Trainer) => {
+    if (!confirm(`A je i sigurt që do ta çaktivizosh trajnerin ${trainer.name}?`)) return
+    try {
+      await api.delete(`/trainers/${trainer.id}`)
+      addNotification('U çaktivizua', 'Trajneri u largua nga lista aktive.', 'success')
+      fetchTrainers()
+    } catch (err: any) {
+      addNotification('Gabim', err.response?.data?.message || 'Çaktivizimi dështoi.', 'error')
+    }
+  }
+
   return (
     <DashboardShell>
       <DashboardHeader
@@ -81,6 +93,8 @@ export default function AdminTrainers() {
           </Button>
         }
       />
+
+      <TeamTabs />
 
       {error && <div className="rounded-lg border border-gray-300 bg-gray-100 px-4 py-2.5 text-sm text-gray-800">{error}</div>}
 
@@ -115,6 +129,7 @@ export default function AdminTrainers() {
                   <th className="px-3 py-2 font-semibold">Tarifa/orë</th>
                   <th className="px-3 py-2 font-semibold">Klientë</th>
                   <th className="px-3 py-2 font-semibold">Statusi</th>
+                  <th className="px-3 py-2 text-right font-semibold">Veprime</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50">
@@ -128,6 +143,16 @@ export default function AdminTrainers() {
                     <td className="px-3 py-3 text-gray-800">{eur(t.hourlyRate)}</td>
                     <td className="px-3 py-3 text-gray-600">{t.clientsCount ?? 0}</td>
                     <td className="px-3 py-3"><Badge accent={t.isAvailable ? 'green' : 'gray'}>{t.isAvailable ? 'I lirë' : 'I zënë'}</Badge></td>
+                    <td className="px-3 py-3 text-right">
+                      <button
+                        type="button"
+                        onClick={() => deactivate(t)}
+                        className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-gray-400 hover:bg-gray-100 hover:text-gray-700"
+                        aria-label="Çaktivizo trajnerin"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    </td>
                   </tr>
                 ))}
               </tbody>

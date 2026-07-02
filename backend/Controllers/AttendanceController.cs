@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using StandUpFitness.Data;
 using StandUpFitness.Models;
+using StandUpFitness.Services;
 
 namespace StandUpFitness.Controllers;
 
@@ -16,16 +17,6 @@ public class AttendanceController : ControllerBase
     public AttendanceController(FitnessContext context)
     {
         _context = context;
-    }
-
-    private async Task<bool> CanAccessClientAsync(int clientId)
-    {
-        if (User.IsInRole("Admin") || User.IsInRole("GymOwner") || User.IsInRole("Trainer") || User.IsInRole("Staff"))
-            return true;
-        var uid = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
-        if (!int.TryParse(uid, out var userId)) return false;
-        var own = await _context.Clients.Where(c => c.UserId == userId).Select(c => (int?)c.Id).FirstOrDefaultAsync();
-        return own == clientId;
     }
 
     private static readonly string[] Weekdays =
@@ -44,15 +35,38 @@ public class AttendanceController : ControllerBase
     {
         if (request.ClientIds == null || request.ClientIds.Count == 0)
             return BadRequest(new { message = "No clients provided" });
+        if (request.GroupId == null)
+            return BadRequest(new { message = "Group is required" });
+        if (!await _context.CanAccessCoreGroupAsync(User, request.GroupId.Value)) return Forbid();
 
         var date = (request.Date ?? DateTime.UtcNow).Date;
+        var clientIds = request.ClientIds.Distinct().ToList();
+        var memberIds = await _context.TrainingGroups
+            .Where(g => g.Id == request.GroupId.Value)
+            .SelectMany(g => g.Clients.Select(c => c.Id))
+            .ToListAsync();
+        var invalidIds = clientIds.Except(memberIds).ToList();
+        if (invalidIds.Count > 0)
+            return BadRequest(new { message = "All selected clients must be members of this group" });
+
+        // One lookup for the whole batch instead of one query per client (N+1).
+        var existingRows = await _context.Attendance
+            .Where(a => clientIds.Contains(a.ClientId) && a.GroupId == request.GroupId && a.AttendanceDate == date)
+            .ToListAsync();
+        var existingByClient = existingRows
+            .GroupBy(a => a.ClientId)
+            .ToDictionary(g => g.Key, g => g.First());
+
         var added = 0;
         var updated = 0;
-        foreach (var clientId in request.ClientIds.Distinct())
+        foreach (var clientId in clientIds)
         {
-            var existing = await _context.Attendance.FirstOrDefaultAsync(a =>
-                a.ClientId == clientId && a.GroupId == request.GroupId && a.AttendanceDate == date);
-            if (existing == null)
+            if (existingByClient.TryGetValue(clientId, out var existing))
+            {
+                existing.IsPresent = request.IsPresent;
+                updated++;
+            }
+            else
             {
                 _context.Attendance.Add(new Attendance
                 {
@@ -63,11 +77,6 @@ public class AttendanceController : ControllerBase
                 });
                 added++;
             }
-            else
-            {
-                existing.IsPresent = request.IsPresent;
-                updated++;
-            }
         }
         await _context.SaveChangesAsync();
         return Ok(new { added, updated, date });
@@ -77,7 +86,7 @@ public class AttendanceController : ControllerBase
     [HttpGet("client-summary")]
     public async Task<IActionResult> ClientSummary([FromQuery] int clientId, [FromQuery] int? year, [FromQuery] int? month)
     {
-        if (!await CanAccessClientAsync(clientId)) return Forbid();
+        if (!await _context.CanAccessCoreClientAsync(User, clientId, managerPermission: "schedule.write")) return Forbid();
         year ??= DateTime.UtcNow.Year;
         month ??= DateTime.UtcNow.Month;
         var monthStart = new DateTime(year.Value, month.Value, 1);
@@ -127,7 +136,7 @@ public class AttendanceController : ControllerBase
     }
 
     // GET: api/attendance/overview?year=2026&month=6  (facility-wide, admin/trainer)
-    [Authorize(Policy = "AdminTrainer")]
+    [Authorize(Policy = "AdminOnly")]
     [HttpGet("overview")]
     public async Task<IActionResult> Overview([FromQuery] int? year, [FromQuery] int? month)
     {

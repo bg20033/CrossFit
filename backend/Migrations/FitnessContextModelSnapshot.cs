@@ -31,7 +31,7 @@ namespace StandUpFitness.Migrations
 
                     b.HasIndex("GroupsId");
 
-                    b.ToTable("ClientTrainingGroups");
+                    b.ToTable("ClientTrainingGroups", (string)null);
                 });
 
             modelBuilder.Entity("StandUpFitness.Models.Attendance", b =>
@@ -61,7 +61,7 @@ namespace StandUpFitness.Migrations
 
                     b.HasIndex("GroupId");
 
-                    b.ToTable("Attendance");
+                    b.ToTable("Attendance", (string)null);
                 });
 
             modelBuilder.Entity("StandUpFitness.Models.AttendanceLog", b =>
@@ -104,9 +104,11 @@ namespace StandUpFitness.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("ScannedById");
+
                     b.HasIndex("ClientId", "CheckInTime");
 
-                    b.ToTable("AttendanceLogs");
+                    b.ToTable("AttendanceLogs", (string)null);
                 });
 
             modelBuilder.Entity("StandUpFitness.Models.AuditLog", b =>
@@ -137,7 +139,7 @@ namespace StandUpFitness.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("AuditLogs");
+                    b.ToTable("AuditLogs", (string)null);
                 });
 
             modelBuilder.Entity("StandUpFitness.Models.CashRegister", b =>
@@ -185,7 +187,7 @@ namespace StandUpFitness.Migrations
 
                     b.HasIndex("StaffId");
 
-                    b.ToTable("CashRegisters");
+                    b.ToTable("CashRegisters", (string)null);
                 });
 
             modelBuilder.Entity("StandUpFitness.Models.ClassSession", b =>
@@ -223,7 +225,7 @@ namespace StandUpFitness.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("ClassSessions");
+                    b.ToTable("ClassSessions", (string)null);
                 });
 
             modelBuilder.Entity("StandUpFitness.Models.Client", b =>
@@ -237,6 +239,10 @@ namespace StandUpFitness.Migrations
 
                     b.Property<DateTime?>("DeletedAt")
                         .HasColumnType("datetime(6)");
+
+                    b.Property<string>("DiscountCategory")
+                        .IsRequired()
+                        .HasColumnType("longtext");
 
                     b.Property<bool>("IsActive")
                         .HasColumnType("tinyint(1)");
@@ -279,7 +285,7 @@ namespace StandUpFitness.Migrations
 
                     b.HasIndex("UserId");
 
-                    b.ToTable("Clients");
+                    b.ToTable("Clients", (string)null);
                 });
 
             modelBuilder.Entity("StandUpFitness.Models.DietPlan", b =>
@@ -327,7 +333,7 @@ namespace StandUpFitness.Migrations
 
                     b.HasIndex("TrainerId");
 
-                    b.ToTable("DietPlans");
+                    b.ToTable("DietPlans", (string)null);
                 });
 
             modelBuilder.Entity("StandUpFitness.Models.DirectMessage", b =>
@@ -359,7 +365,103 @@ namespace StandUpFitness.Migrations
 
                     b.HasIndex("SenderUserId", "ReceiverUserId", "SentAt");
 
-                    b.ToTable("DirectMessages");
+                    b.ToTable("DirectMessages", (string)null);
+                });
+
+            modelBuilder.Entity("StandUpFitness.Models.DiscountCategory", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<int>("DiscountPercent")
+                        .HasColumnType("int");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("tinyint(1)");
+
+                    b.Property<bool>("IsBuiltIn")
+                        .HasColumnType("tinyint(1)");
+
+                    b.Property<string>("Key")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("varchar(40)");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(120)
+                        .HasColumnType("varchar(120)");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Key")
+                        .IsUnique();
+
+                    b.ToTable("DiscountCategories", (string)null);
+
+                    b.HasData(
+                        new
+                        {
+                            Id = 1,
+                            CreatedAt = new DateTime(2026, 7, 2, 12, 38, 23, 509, DateTimeKind.Utc).AddTicks(7010),
+                            DiscountPercent = 0,
+                            IsActive = true,
+                            IsBuiltIn = true,
+                            Key = "standard",
+                            Name = "Standarde",
+                            UpdatedAt = new DateTime(2026, 7, 2, 12, 38, 23, 509, DateTimeKind.Utc).AddTicks(7010)
+                        },
+                        new
+                        {
+                            Id = 2,
+                            CreatedAt = new DateTime(2026, 7, 2, 12, 38, 23, 509, DateTimeKind.Utc).AddTicks(7010),
+                            DiscountPercent = 20,
+                            IsActive = true,
+                            IsBuiltIn = true,
+                            Key = "police",
+                            Name = "Policia (zbritje)",
+                            UpdatedAt = new DateTime(2026, 7, 2, 12, 38, 23, 509, DateTimeKind.Utc).AddTicks(7010)
+                        },
+                        new
+                        {
+                            Id = 3,
+                            CreatedAt = new DateTime(2026, 7, 2, 12, 38, 23, 509, DateTimeKind.Utc).AddTicks(7010),
+                            DiscountPercent = 100,
+                            IsActive = true,
+                            IsBuiltIn = true,
+                            Key = "free",
+                            Name = "Falas (0€)",
+                            UpdatedAt = new DateTime(2026, 7, 2, 12, 38, 23, 509, DateTimeKind.Utc).AddTicks(7010)
+                        },
+                        new
+                        {
+                            Id = 4,
+                            CreatedAt = new DateTime(2026, 7, 2, 12, 38, 23, 509, DateTimeKind.Utc).AddTicks(7010),
+                            DiscountPercent = 0,
+                            IsActive = true,
+                            IsBuiltIn = true,
+                            Key = "shared",
+                            Name = "E ndarë (3–4)",
+                            UpdatedAt = new DateTime(2026, 7, 2, 12, 38, 23, 509, DateTimeKind.Utc).AddTicks(7010)
+                        },
+                        new
+                        {
+                            Id = 5,
+                            CreatedAt = new DateTime(2026, 7, 2, 12, 38, 23, 509, DateTimeKind.Utc).AddTicks(7010),
+                            DiscountPercent = 0,
+                            IsActive = true,
+                            IsBuiltIn = true,
+                            Key = "session_pass",
+                            Name = "Pako seancash",
+                            UpdatedAt = new DateTime(2026, 7, 2, 12, 38, 23, 509, DateTimeKind.Utc).AddTicks(7010)
+                        });
                 });
 
             modelBuilder.Entity("StandUpFitness.Models.DynamicRole", b =>
@@ -399,7 +501,7 @@ namespace StandUpFitness.Migrations
                     b.HasIndex("Key")
                         .IsUnique();
 
-                    b.ToTable("DynamicRoles");
+                    b.ToTable("DynamicRoles", (string)null);
                 });
 
             modelBuilder.Entity("StandUpFitness.Models.Expense", b =>
@@ -444,7 +546,7 @@ namespace StandUpFitness.Migrations
 
                     b.HasIndex("CategoryId");
 
-                    b.ToTable("Expenses");
+                    b.ToTable("Expenses", (string)null);
                 });
 
             modelBuilder.Entity("StandUpFitness.Models.Finance", b =>
@@ -509,7 +611,7 @@ namespace StandUpFitness.Migrations
 
                     b.HasIndex("Type", "TransactionDate");
 
-                    b.ToTable("Finances");
+                    b.ToTable("Finances", (string)null);
                 });
 
             modelBuilder.Entity("StandUpFitness.Models.FinanceCategory", b =>
@@ -544,7 +646,7 @@ namespace StandUpFitness.Migrations
                     b.HasIndex("Name", "Type")
                         .IsUnique();
 
-                    b.ToTable("FinanceCategories");
+                    b.ToTable("FinanceCategories", (string)null);
                 });
 
             modelBuilder.Entity("StandUpFitness.Models.FoodLogEntry", b =>
@@ -589,7 +691,7 @@ namespace StandUpFitness.Migrations
 
                     b.HasIndex("UserId", "Date");
 
-                    b.ToTable("FoodLogEntries");
+                    b.ToTable("FoodLogEntries", (string)null);
                 });
 
             modelBuilder.Entity("StandUpFitness.Models.Goal", b =>
@@ -638,7 +740,7 @@ namespace StandUpFitness.Migrations
 
                     b.HasIndex("ClientId");
 
-                    b.ToTable("Goals");
+                    b.ToTable("Goals", (string)null);
                 });
 
             modelBuilder.Entity("StandUpFitness.Models.GroupScheduleSlot", b =>
@@ -665,7 +767,7 @@ namespace StandUpFitness.Migrations
 
                     b.HasIndex("TrainingGroupId", "DayOfWeek", "StartMin");
 
-                    b.ToTable("GroupScheduleSlots");
+                    b.ToTable("GroupScheduleSlots", (string)null);
                 });
 
             modelBuilder.Entity("StandUpFitness.Models.GroupSession", b =>
@@ -723,7 +825,7 @@ namespace StandUpFitness.Migrations
 
                     b.HasIndex("TrainingGroupId", "Date");
 
-                    b.ToTable("GroupSessions");
+                    b.ToTable("GroupSessions", (string)null);
                 });
 
             modelBuilder.Entity("StandUpFitness.Models.GroupWaitlistEntry", b =>
@@ -754,7 +856,7 @@ namespace StandUpFitness.Migrations
 
                     b.HasIndex("TrainingGroupId", "ClientId", "Status");
 
-                    b.ToTable("GroupWaitlistEntries");
+                    b.ToTable("GroupWaitlistEntries", (string)null);
                 });
 
             modelBuilder.Entity("StandUpFitness.Models.GymNotice", b =>
@@ -807,7 +909,7 @@ namespace StandUpFitness.Migrations
 
                     b.HasIndex("IsActive", "StartsAt", "EndsAt");
 
-                    b.ToTable("GymNotices");
+                    b.ToTable("GymNotices", (string)null);
                 });
 
             modelBuilder.Entity("StandUpFitness.Models.GymOwner", b =>
@@ -844,7 +946,7 @@ namespace StandUpFitness.Migrations
 
                     b.HasIndex("UserId");
 
-                    b.ToTable("GymOwners");
+                    b.ToTable("GymOwners", (string)null);
                 });
 
             modelBuilder.Entity("StandUpFitness.Models.GymSettings", b =>
@@ -886,7 +988,7 @@ namespace StandUpFitness.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("GymSettings");
+                    b.ToTable("GymSettings", (string)null);
                 });
 
             modelBuilder.Entity("StandUpFitness.Models.Invoice", b =>
@@ -974,7 +1076,7 @@ namespace StandUpFitness.Migrations
 
                     b.HasIndex("Status");
 
-                    b.ToTable("Invoices");
+                    b.ToTable("Invoices", (string)null);
                 });
 
             modelBuilder.Entity("StandUpFitness.Models.InvoiceItem", b =>
@@ -993,6 +1095,9 @@ namespace StandUpFitness.Migrations
                     b.Property<int>("InvoiceId")
                         .HasColumnType("int");
 
+                    b.Property<int?>("ProductId")
+                        .HasColumnType("int");
+
                     b.Property<int>("Quantity")
                         .HasColumnType("int");
 
@@ -1006,9 +1111,13 @@ namespace StandUpFitness.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("GroupId");
+
                     b.HasIndex("InvoiceId");
 
-                    b.ToTable("InvoiceItems");
+                    b.HasIndex("ProductId");
+
+                    b.ToTable("InvoiceItems", (string)null);
                 });
 
             modelBuilder.Entity("StandUpFitness.Models.MembershipPlan", b =>
@@ -1060,7 +1169,7 @@ namespace StandUpFitness.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("MembershipPlans");
+                    b.ToTable("MembershipPlans", (string)null);
                 });
 
             modelBuilder.Entity("StandUpFitness.Models.NutritionProfile", b =>
@@ -1122,7 +1231,7 @@ namespace StandUpFitness.Migrations
                     b.HasIndex("UserId")
                         .IsUnique();
 
-                    b.ToTable("NutritionProfiles");
+                    b.ToTable("NutritionProfiles", (string)null);
                 });
 
             modelBuilder.Entity("StandUpFitness.Models.PaymentTransaction", b =>
@@ -1191,7 +1300,7 @@ namespace StandUpFitness.Migrations
 
                     b.HasIndex("StaffId");
 
-                    b.ToTable("PaymentTransactions");
+                    b.ToTable("PaymentTransactions", (string)null);
                 });
 
             modelBuilder.Entity("StandUpFitness.Models.Permission", b =>
@@ -1222,7 +1331,7 @@ namespace StandUpFitness.Migrations
                     b.HasIndex("Key")
                         .IsUnique();
 
-                    b.ToTable("Permissions");
+                    b.ToTable("Permissions", (string)null);
                 });
 
             modelBuilder.Entity("StandUpFitness.Models.PersonalRecord", b =>
@@ -1255,7 +1364,7 @@ namespace StandUpFitness.Migrations
 
                     b.HasIndex("UserId");
 
-                    b.ToTable("PersonalRecords");
+                    b.ToTable("PersonalRecords", (string)null);
                 });
 
             modelBuilder.Entity("StandUpFitness.Models.PersonalSession", b =>
@@ -1299,7 +1408,51 @@ namespace StandUpFitness.Migrations
 
                     b.HasIndex("TrainerId");
 
-                    b.ToTable("PersonalSessions");
+                    b.ToTable("PersonalSessions", (string)null);
+                });
+
+            modelBuilder.Entity("StandUpFitness.Models.Product", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    b.Property<decimal?>("CostPrice")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<string>("Description")
+                        .HasColumnType("longtext");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("tinyint(1)");
+
+                    b.Property<int>("LowStockThreshold")
+                        .HasColumnType("int");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("longtext");
+
+                    b.Property<decimal>("SalePrice")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<string>("Sku")
+                        .HasColumnType("longtext");
+
+                    b.Property<string>("Unit")
+                        .HasColumnType("longtext");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("Products", (string)null);
                 });
 
             modelBuilder.Entity("StandUpFitness.Models.ProgressLog", b =>
@@ -1365,7 +1518,7 @@ namespace StandUpFitness.Migrations
 
                     b.HasIndex("ClientId");
 
-                    b.ToTable("ProgressLogs");
+                    b.ToTable("ProgressLogs", (string)null);
                 });
 
             modelBuilder.Entity("StandUpFitness.Models.ProgressPhoto", b =>
@@ -1399,7 +1552,7 @@ namespace StandUpFitness.Migrations
 
                     b.HasIndex("ClientId");
 
-                    b.ToTable("ProgressPhotos");
+                    b.ToTable("ProgressPhotos", (string)null);
                 });
 
             modelBuilder.Entity("StandUpFitness.Models.Recipe", b =>
@@ -1429,7 +1582,7 @@ namespace StandUpFitness.Migrations
 
                     b.HasIndex("UserId");
 
-                    b.ToTable("Recipes");
+                    b.ToTable("Recipes", (string)null);
                 });
 
             modelBuilder.Entity("StandUpFitness.Models.RefreshToken", b =>
@@ -1462,7 +1615,7 @@ namespace StandUpFitness.Migrations
 
                     b.HasIndex("UserId");
 
-                    b.ToTable("RefreshTokens");
+                    b.ToTable("RefreshTokens", (string)null);
                 });
 
             modelBuilder.Entity("StandUpFitness.Models.RentalInquiry", b =>
@@ -1496,7 +1649,7 @@ namespace StandUpFitness.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("RentalInquiries");
+                    b.ToTable("RentalInquiries", (string)null);
                 });
 
             modelBuilder.Entity("StandUpFitness.Models.RentalInvoice", b =>
@@ -1542,7 +1695,7 @@ namespace StandUpFitness.Migrations
 
                     b.HasIndex("TrainerTenantId");
 
-                    b.ToTable("RentalInvoices");
+                    b.ToTable("RentalInvoices", (string)null);
                 });
 
             modelBuilder.Entity("StandUpFitness.Models.RentalScheduleSlot", b =>
@@ -1569,7 +1722,7 @@ namespace StandUpFitness.Migrations
 
                     b.HasIndex("TrainerTenantId", "DayOfWeek", "StartMin");
 
-                    b.ToTable("RentalScheduleSlots");
+                    b.ToTable("RentalScheduleSlots", (string)null);
                 });
 
             modelBuilder.Entity("StandUpFitness.Models.RentalSession", b =>
@@ -1616,7 +1769,7 @@ namespace StandUpFitness.Migrations
 
                     b.HasIndex("TrainerTenantId", "Date");
 
-                    b.ToTable("RentalSessions");
+                    b.ToTable("RentalSessions", (string)null);
                 });
 
             modelBuilder.Entity("StandUpFitness.Models.RolePermission", b =>
@@ -1631,7 +1784,7 @@ namespace StandUpFitness.Migrations
 
                     b.HasIndex("PermissionId");
 
-                    b.ToTable("RolePermissions");
+                    b.ToTable("RolePermissions", (string)null);
                 });
 
             modelBuilder.Entity("StandUpFitness.Models.Salary", b =>
@@ -1699,7 +1852,7 @@ namespace StandUpFitness.Migrations
                     b.HasIndex("StaffId", "Year", "Month")
                         .IsUnique();
 
-                    b.ToTable("Salaries");
+                    b.ToTable("Salaries", (string)null);
                 });
 
             modelBuilder.Entity("StandUpFitness.Models.ShoppingItem", b =>
@@ -1725,7 +1878,7 @@ namespace StandUpFitness.Migrations
 
                     b.HasIndex("UserId");
 
-                    b.ToTable("ShoppingItems");
+                    b.ToTable("ShoppingItems", (string)null);
                 });
 
             modelBuilder.Entity("StandUpFitness.Models.Staff", b =>
@@ -1769,7 +1922,50 @@ namespace StandUpFitness.Migrations
 
                     b.HasIndex("UserId");
 
-                    b.ToTable("Staff");
+                    b.ToTable("Staff", (string)null);
+                });
+
+            modelBuilder.Entity("StandUpFitness.Models.StockMovement", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<int?>("InvoiceItemId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("MovementType")
+                        .IsRequired()
+                        .HasColumnType("longtext");
+
+                    b.Property<string>("Notes")
+                        .HasColumnType("longtext");
+
+                    b.Property<int>("ProductId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("Quantity")
+                        .HasColumnType("int");
+
+                    b.Property<int?>("StaffId")
+                        .HasColumnType("int");
+
+                    b.Property<decimal?>("UnitCost")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("InvoiceItemId");
+
+                    b.HasIndex("ProductId");
+
+                    b.HasIndex("StaffId");
+
+                    b.ToTable("StockMovements", (string)null);
                 });
 
             modelBuilder.Entity("StandUpFitness.Models.TenantClient", b =>
@@ -1819,7 +2015,7 @@ namespace StandUpFitness.Migrations
 
                     b.HasIndex("UserId");
 
-                    b.ToTable("TenantClients");
+                    b.ToTable("TenantClients", (string)null);
                 });
 
             modelBuilder.Entity("StandUpFitness.Models.Trainer", b =>
@@ -1870,7 +2066,7 @@ namespace StandUpFitness.Migrations
 
                     b.HasIndex("UserId");
 
-                    b.ToTable("Trainers");
+                    b.ToTable("Trainers", (string)null);
                 });
 
             modelBuilder.Entity("StandUpFitness.Models.TrainerCommission", b =>
@@ -1951,7 +2147,7 @@ namespace StandUpFitness.Migrations
 
                     b.HasIndex("TrainerId", "Year", "Month");
 
-                    b.ToTable("TrainerCommissions");
+                    b.ToTable("TrainerCommissions", (string)null);
                 });
 
             modelBuilder.Entity("StandUpFitness.Models.TrainerTenant", b =>
@@ -1994,7 +2190,7 @@ namespace StandUpFitness.Migrations
 
                     b.HasIndex("UserId");
 
-                    b.ToTable("TrainerTenants");
+                    b.ToTable("TrainerTenants", (string)null);
                 });
 
             modelBuilder.Entity("StandUpFitness.Models.TrainerWeeklyReport", b =>
@@ -2052,7 +2248,7 @@ namespace StandUpFitness.Migrations
 
                     b.HasIndex("TrainerId", "ClientId", "WeekStart");
 
-                    b.ToTable("TrainerWeeklyReports");
+                    b.ToTable("TrainerWeeklyReports", (string)null);
                 });
 
             modelBuilder.Entity("StandUpFitness.Models.TrainingGroup", b =>
@@ -2100,7 +2296,7 @@ namespace StandUpFitness.Migrations
 
                     b.HasIndex("TrainerId");
 
-                    b.ToTable("TrainingGroups");
+                    b.ToTable("TrainingGroups", (string)null);
                 });
 
             modelBuilder.Entity("StandUpFitness.Models.User", b =>
@@ -2141,7 +2337,7 @@ namespace StandUpFitness.Migrations
                     b.HasIndex("Email")
                         .IsUnique();
 
-                    b.ToTable("Users");
+                    b.ToTable("Users", (string)null);
                 });
 
             modelBuilder.Entity("StandUpFitness.Models.UserNotification", b =>
@@ -2181,7 +2377,7 @@ namespace StandUpFitness.Migrations
 
                     b.HasIndex("UserId", "IsRead", "CreatedAt");
 
-                    b.ToTable("UserNotifications");
+                    b.ToTable("UserNotifications", (string)null);
                 });
 
             modelBuilder.Entity("StandUpFitness.Models.UserRoleAssignment", b =>
@@ -2199,7 +2395,7 @@ namespace StandUpFitness.Migrations
 
                     b.HasIndex("DynamicRoleId");
 
-                    b.ToTable("UserRoleAssignments");
+                    b.ToTable("UserRoleAssignments", (string)null);
                 });
 
             modelBuilder.Entity("StandUpFitness.Models.WaterLog", b =>
@@ -2225,7 +2421,7 @@ namespace StandUpFitness.Migrations
                     b.HasIndex("UserId", "Date")
                         .IsUnique();
 
-                    b.ToTable("WaterLogs");
+                    b.ToTable("WaterLogs", (string)null);
                 });
 
             modelBuilder.Entity("StandUpFitness.Models.WorkoutPlan", b =>
@@ -2276,7 +2472,7 @@ namespace StandUpFitness.Migrations
 
                     b.HasIndex("TrainerId");
 
-                    b.ToTable("WorkoutPlans");
+                    b.ToTable("WorkoutPlans", (string)null);
                 });
 
             modelBuilder.Entity("ClientTrainingGroups", b =>
@@ -2320,7 +2516,13 @@ namespace StandUpFitness.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
+                    b.HasOne("StandUpFitness.Models.User", "ScannedBy")
+                        .WithMany()
+                        .HasForeignKey("ScannedById");
+
                     b.Navigation("Client");
+
+                    b.Navigation("ScannedBy");
                 });
 
             modelBuilder.Entity("StandUpFitness.Models.CashRegister", b =>
@@ -2347,7 +2549,7 @@ namespace StandUpFitness.Migrations
                         .OnDelete(DeleteBehavior.SetNull);
 
                     b.HasOne("StandUpFitness.Models.User", "User")
-                        .WithMany("ClientProfile")
+                        .WithMany("ClientProfiles")
                         .HasForeignKey("UserId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
@@ -2524,7 +2726,7 @@ namespace StandUpFitness.Migrations
             modelBuilder.Entity("StandUpFitness.Models.GymOwner", b =>
                 {
                     b.HasOne("StandUpFitness.Models.User", "User")
-                        .WithMany("GymOwnerProfile")
+                        .WithMany("GymOwnerProfiles")
                         .HasForeignKey("UserId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
@@ -2559,13 +2761,26 @@ namespace StandUpFitness.Migrations
 
             modelBuilder.Entity("StandUpFitness.Models.InvoiceItem", b =>
                 {
+                    b.HasOne("StandUpFitness.Models.TrainingGroup", "Group")
+                        .WithMany()
+                        .HasForeignKey("GroupId");
+
                     b.HasOne("StandUpFitness.Models.Invoice", "Invoice")
                         .WithMany("Items")
                         .HasForeignKey("InvoiceId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
+                    b.HasOne("StandUpFitness.Models.Product", "Product")
+                        .WithMany("InvoiceItems")
+                        .HasForeignKey("ProductId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.Navigation("Group");
+
                     b.Navigation("Invoice");
+
+                    b.Navigation("Product");
                 });
 
             modelBuilder.Entity("StandUpFitness.Models.NutritionProfile", b =>
@@ -2769,6 +2984,31 @@ namespace StandUpFitness.Migrations
                     b.Navigation("User");
                 });
 
+            modelBuilder.Entity("StandUpFitness.Models.StockMovement", b =>
+                {
+                    b.HasOne("StandUpFitness.Models.InvoiceItem", "InvoiceItem")
+                        .WithMany("StockMovements")
+                        .HasForeignKey("InvoiceItemId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("StandUpFitness.Models.Product", "Product")
+                        .WithMany("StockMovements")
+                        .HasForeignKey("ProductId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("StandUpFitness.Models.User", "Staff")
+                        .WithMany()
+                        .HasForeignKey("StaffId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.Navigation("InvoiceItem");
+
+                    b.Navigation("Product");
+
+                    b.Navigation("Staff");
+                });
+
             modelBuilder.Entity("StandUpFitness.Models.TenantClient", b =>
                 {
                     b.HasOne("StandUpFitness.Models.TrainerTenant", "TrainerTenant")
@@ -2789,7 +3029,7 @@ namespace StandUpFitness.Migrations
             modelBuilder.Entity("StandUpFitness.Models.Trainer", b =>
                 {
                     b.HasOne("StandUpFitness.Models.User", "User")
-                        .WithMany("TrainerProfile")
+                        .WithMany("TrainerProfiles")
                         .HasForeignKey("UserId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
@@ -2974,9 +3214,21 @@ namespace StandUpFitness.Migrations
                     b.Navigation("Items");
                 });
 
+            modelBuilder.Entity("StandUpFitness.Models.InvoiceItem", b =>
+                {
+                    b.Navigation("StockMovements");
+                });
+
             modelBuilder.Entity("StandUpFitness.Models.Permission", b =>
                 {
                     b.Navigation("Roles");
+                });
+
+            modelBuilder.Entity("StandUpFitness.Models.Product", b =>
+                {
+                    b.Navigation("InvoiceItems");
+
+                    b.Navigation("StockMovements");
                 });
 
             modelBuilder.Entity("StandUpFitness.Models.Trainer", b =>
@@ -3008,11 +3260,11 @@ namespace StandUpFitness.Migrations
 
             modelBuilder.Entity("StandUpFitness.Models.User", b =>
                 {
-                    b.Navigation("ClientProfile");
+                    b.Navigation("ClientProfiles");
 
-                    b.Navigation("GymOwnerProfile");
+                    b.Navigation("GymOwnerProfiles");
 
-                    b.Navigation("TrainerProfile");
+                    b.Navigation("TrainerProfiles");
                 });
 #pragma warning restore 612, 618
         }

@@ -47,6 +47,10 @@ export default function ClientWorkouts() {
     }
   }
 
+  useEffect(() => {
+    if (profileId == null) setLoading(false)
+  }, [profileId])
+
   const downloadPDF = (plan: WorkoutPlan) => {
     generateWorkoutPDF({
       id: plan.id,
@@ -67,6 +71,8 @@ export default function ClientWorkouts() {
       <Panel title="Planet" action={<Badge accent="gray">{plans.length}</Badge>}>
         {loading ? (
           <p className="py-6 text-center text-sm text-gray-400">Duke ngarkuar…</p>
+        ) : profileId == null ? (
+          <EmptyState icon={<Dumbbell className="h-5 w-5" />} text="Ende s'ke plan ushtrimesh të lidhur me profilin tënd." />
         ) : plans.length === 0 ? (
           <EmptyState icon={<Dumbbell className="h-5 w-5" />} text="Ende s'ke plan ushtrimesh. Kontakto trajnerin tënd." />
         ) : (

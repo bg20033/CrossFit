@@ -4,12 +4,13 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using StandUpFitness.Data;
 using StandUpFitness.Models;
+using StandUpFitness.Services;
 
 namespace StandUpFitness.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
-[Authorize(Policy = "AdminTrainer")]
+[Authorize]
 public class TrainersController : ControllerBase
 {
     private readonly FitnessContext _context;
@@ -20,12 +21,12 @@ public class TrainersController : ControllerBase
     }
 
     // GET: api/trainers/me -> trainer profile for the logged-in user (auto-created on first access)
+    [Authorize(Policy = "AdminTrainer")]
     [HttpGet("me")]
     public async Task<IActionResult> GetMyTrainerProfile()
     {
-        var userIdClaim = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier);
-        if (!int.TryParse(userIdClaim?.Value, out var userId))
-            return Unauthorized();
+        var userId = User.CurrentUserId();
+        if (userId == null) return Unauthorized();
 
         var trainer = await _context.Trainers
             .Include(t => t.User)
@@ -35,10 +36,15 @@ public class TrainersController : ControllerBase
         {
             var user = await _context.Users.FindAsync(userId);
             if (user == null) return NotFound();
-            trainer = new Trainer { UserId = userId };
+            if (user.Role != UserRole.Trainer) return Forbid();
+            trainer = new Trainer { UserId = userId.Value };
             _context.Trainers.Add(trainer);
             await _context.SaveChangesAsync();
             await _context.Entry(trainer).Reference(t => t.User).LoadAsync();
+        }
+        else if (trainer.User.Role != UserRole.Trainer)
+        {
+            return Forbid();
         }
 
         return Ok(new
@@ -53,12 +59,16 @@ public class TrainersController : ControllerBase
     }
 
     // GET: api/trainers
+    [Authorize(Policy = "TrainerManage")]
     [HttpGet]
     public async Task<IActionResult> GetTrainers([FromQuery] int page = 1, [FromQuery] int pageSize = 10)
     {
-        var total = await _context.Trainers.CountAsync();
-        var trainers = await _context.Trainers
+        var query = _context.Trainers
             .Include(t => t.User)
+            .Where(t => t.User.IsActive && t.User.Role == UserRole.Trainer);
+
+        var total = await query.CountAsync();
+        var trainers = await query
             .OrderByDescending(t => t.CreatedAt)
             .Skip((page - 1) * pageSize)
             .Take(pageSize)
@@ -82,9 +92,12 @@ public class TrainersController : ControllerBase
     }
 
     // GET: api/trainers/{id}
+    [Authorize(Policy = "AdminTrainer")]
     [HttpGet("{id}")]
     public async Task<IActionResult> GetTrainer(int id)
     {
+        if (!await _context.CanAccessCoreTrainerAsync(User, id, "trainers.write")) return Forbid();
+
         var trainer = await _context.Trainers
             .Include(t => t.User)
             .Include(t => t.Groups)
@@ -113,7 +126,7 @@ public class TrainersController : ControllerBase
     }
 
     // POST: api/trainers/create
-    [Authorize(Policy = "AdminOnly")]
+    [Authorize(Policy = "TrainerManage")]
     [HttpPost("create")]
     public async Task<IActionResult> CreateTrainer([FromBody] CreateTrainerRequest request)
     {
@@ -151,6 +164,10 @@ public class TrainersController : ControllerBase
     }
 
     // PUT: api/trainers/{id}
+    // Admins edit anyone. A trainer may only edit their own profile, and never
+    // the pay-related fields — previously any trainer could raise their own
+    // (or a colleague's) HourlyRate/CommissionPerClient through this endpoint.
+    [Authorize(Policy = "AdminTrainer")]
     [HttpPut("{id}")]
     public async Task<IActionResult> UpdateTrainer(int id, [FromBody] UpdateTrainerRequest request)
     {
@@ -160,6 +177,20 @@ public class TrainersController : ControllerBase
 
         if (trainer == null)
             return NotFound();
+
+        var canManage = User.CanManageCoreScope(permission: "trainers.write");
+        if (!canManage)
+        {
+            var userId = User.CurrentUserId();
+            if (userId == null || trainer.UserId != userId)
+                return Forbid();
+
+            // Compensation & classification stay admin-only.
+            request.HourlyRate = null;
+            request.CommissionPerClient = null;
+            request.PaymentModel = null;
+            request.TrainerType = null;
+        }
 
         if (!string.IsNullOrWhiteSpace(request.Name))
             trainer.User.Name = request.Name.Trim();
@@ -184,10 +215,39 @@ public class TrainersController : ControllerBase
         return Ok(new { message = "Trainer updated successfully" });
     }
 
+    // DELETE: api/trainers/{id}
+    // Soft-deactivate a core trainer. Historical groups, reports, and payments
+    // keep their foreign keys; the user can no longer log in and the trainer no
+    // longer appears in assignable trainer lists.
+    [Authorize(Policy = "TrainerManage")]
+    [HttpDelete("{id}")]
+    public async Task<IActionResult> DeleteTrainer(int id)
+    {
+        var trainer = await _context.Trainers
+            .Include(t => t.User)
+            .FirstOrDefaultAsync(t => t.Id == id);
+
+        if (trainer == null)
+            return NotFound();
+        if (trainer.User.Role != UserRole.Trainer)
+            return BadRequest(new { message = "Ky profil nuk është trajner core. Qiragjinjtë menaxhohen te Qiragjinjtë." });
+
+        trainer.IsAvailable = false;
+        trainer.UpdatedAt = DateTime.UtcNow;
+        trainer.User.IsActive = false;
+        trainer.User.UpdatedAt = DateTime.UtcNow;
+        await _context.SaveChangesAsync();
+
+        return Ok(new { message = "Trainer deactivated successfully" });
+    }
+
     // GET: api/trainers/{id}/clients
+    [Authorize(Policy = "AdminTrainer")]
     [HttpGet("{id}/clients")]
     public async Task<IActionResult> GetTrainerClients(int id)
     {
+        if (!await _context.CanAccessCoreTrainerAsync(User, id, "trainers.write")) return Forbid();
+
         var trainer = await _context.Trainers.FindAsync(id);
         if (trainer == null)
             return NotFound();
@@ -198,73 +258,67 @@ public class TrainersController : ControllerBase
             .Include(c => c.Groups)
             .Include(c => c.Goals)
             .OrderBy(c => c.User.Name)
+            .AsSplitQuery()
             .ToListAsync();
 
-        var result = new List<object>();
-        foreach (var client in clients)
-        {
-            var latestProgress = await _context.ProgressLogs
-                .Where(p => p.ClientId == client.Id)
-                .OrderByDescending(p => p.Date)
-                .Select(p => new
-                {
-                    Weight = p.Weight,
-                    Chest = p.Chest ?? 0,
-                    Waist = p.Waist ?? 0,
-                    Hips = p.Hips ?? 0,
-                    Arms = p.Arms ?? 0,
-                    BodyFat = p.BodyFat ?? 0,
-                    UpdatedAt = p.Date
-                })
-                .FirstOrDefaultAsync();
+        // This endpoint used to fire 5 extra queries PER client (N+1: progress,
+        // attendance, last check-in, workout plans, diet plans — 151 queries for
+        // 30 clients). Everything is now fetched in 5 batched queries and grouped
+        // in memory.
+        var clientIds = clients.Select(c => c.Id).ToList();
 
-            var attendance = await _context.Attendance
-                .Where(a => a.ClientId == client.Id)
-                .Include(a => a.Group)
+        var latestProgressByClient = (await _context.ProgressLogs
+                .Where(p => clientIds.Contains(p.ClientId))
+                .OrderByDescending(p => p.Date)
+                .Select(p => new { p.ClientId, p.Weight, p.Chest, p.Waist, p.Hips, p.Arms, p.BodyFat, p.Date })
+                .ToListAsync())
+            .GroupBy(p => p.ClientId)
+            .ToDictionary(g => g.Key, g => g.First());
+
+        var recentAttendance = (await _context.Attendance
+                .Where(a => clientIds.Contains(a.ClientId))
                 .OrderByDescending(a => a.AttendanceDate)
-                .Take(12)
                 .Select(a => new
                 {
+                    a.ClientId,
                     a.Id,
                     Date = a.AttendanceDate,
                     Present = a.IsPresent,
                     GroupName = a.Group != null ? a.Group.Name : "Manual"
                 })
-                .ToListAsync();
+                .Take(12 * 40) // sane cap; grouped per client below
+                .ToListAsync())
+            .GroupBy(a => a.ClientId)
+            .ToDictionary(g => g.Key, g => g.Take(12).ToList());
 
-            var lastCheckIn = await _context.AttendanceLogs
-                .Where(a => a.ClientId == client.Id)
-                .OrderByDescending(a => a.CheckInTime)
-                .Select(a => (DateTime?)a.CheckInTime)
-                .FirstOrDefaultAsync();
+        var lastCheckIns = await _context.AttendanceLogs
+            .Where(a => clientIds.Contains(a.ClientId))
+            .GroupBy(a => a.ClientId)
+            .Select(g => new { ClientId = g.Key, Last = (DateTime?)g.Max(x => x.CheckInTime) })
+            .ToDictionaryAsync(x => x.ClientId, x => x.Last);
 
-            var workoutPlans = await _context.WorkoutPlans
-                .Where(p => p.ClientId == client.Id && p.TrainerId == id)
+        var workoutPlansByClient = (await _context.WorkoutPlans
+                .Where(p => clientIds.Contains(p.ClientId) && p.TrainerId == id)
                 .OrderByDescending(p => p.CreatedAt)
-                .Take(8)
-                .Select(p => new
-                {
-                    p.Id,
-                    Title = p.Name,
-                    Type = "workout",
-                    p.CreatedAt,
-                    Status = p.IsActive ? "active" : "draft"
-                })
-                .ToListAsync();
+                .Select(p => new { p.ClientId, p.Id, Title = p.Name, Type = "workout", p.CreatedAt, Status = p.IsActive ? "active" : "draft" })
+                .ToListAsync())
+            .GroupBy(p => p.ClientId)
+            .ToDictionary(g => g.Key, g => g.Take(8).ToList());
 
-            var dietPlans = await _context.DietPlans
-                .Where(p => p.ClientId == client.Id && p.TrainerId == id)
+        var dietPlansByClient = (await _context.DietPlans
+                .Where(p => clientIds.Contains(p.ClientId) && p.TrainerId == id)
                 .OrderByDescending(p => p.CreatedAt)
-                .Take(8)
-                .Select(p => new
-                {
-                    p.Id,
-                    Title = p.Name,
-                    Type = "diet",
-                    p.CreatedAt,
-                    Status = p.IsActive ? "active" : "draft"
-                })
-                .ToListAsync();
+                .Select(p => new { p.ClientId, p.Id, Title = p.Name, Type = "diet", p.CreatedAt, Status = p.IsActive ? "active" : "draft" })
+                .ToListAsync())
+            .GroupBy(p => p.ClientId)
+            .ToDictionary(g => g.Key, g => g.Take(8).ToList());
+
+        var result = new List<object>();
+        foreach (var client in clients)
+        {
+            latestProgressByClient.TryGetValue(client.Id, out var progress);
+            var workoutPlans = workoutPlansByClient.GetValueOrDefault(client.Id) ?? new();
+            var dietPlans = dietPlansByClient.GetValueOrDefault(client.Id) ?? new();
 
             result.Add(new
             {
@@ -274,21 +328,32 @@ public class TrainersController : ControllerBase
                 client.User.Email,
                 ActivePackage = client.MembershipType,
                 GroupName = client.Groups.FirstOrDefault()?.Name ?? "—",
-                LastCheckIn = lastCheckIn,
+                LastCheckIn = lastCheckIns.GetValueOrDefault(client.Id),
                 Goals = string.Join(", ", client.Goals.Where(g => g.Status != "completed").Select(g => g.Title)),
                 Injuries = "",
                 Notes = "",
-                Measurements = latestProgress ?? new
-                {
-                    Weight = 0m,
-                    Chest = 0m,
-                    Waist = 0m,
-                    Hips = 0m,
-                    Arms = 0m,
-                    BodyFat = 0m,
-                    UpdatedAt = client.UpdatedAt
-                },
-                Attendance = attendance,
+                Measurements = progress == null
+                    ? new
+                    {
+                        Weight = 0m,
+                        Chest = 0m,
+                        Waist = 0m,
+                        Hips = 0m,
+                        Arms = 0m,
+                        BodyFat = 0m,
+                        UpdatedAt = client.UpdatedAt
+                    }
+                    : new
+                    {
+                        Weight = progress.Weight,
+                        Chest = progress.Chest ?? 0,
+                        Waist = progress.Waist ?? 0,
+                        Hips = progress.Hips ?? 0,
+                        Arms = progress.Arms ?? 0,
+                        BodyFat = progress.BodyFat ?? 0,
+                        UpdatedAt = progress.Date
+                    },
+                Attendance = recentAttendance.GetValueOrDefault(client.Id) ?? new(),
                 Plans = workoutPlans.Concat(dietPlans).OrderByDescending(p => p.CreatedAt).Take(12)
             });
         }
@@ -297,9 +362,12 @@ public class TrainersController : ControllerBase
     }
 
     // GET: api/trainers/{id}/schedule
+    [Authorize(Policy = "AdminTrainer")]
     [HttpGet("{id}/schedule")]
     public async Task<IActionResult> GetTrainerSchedule(int id)
     {
+        if (!await _context.CanAccessCoreTrainerAsync(User, id, "trainers.write")) return Forbid();
+
         var trainer = await _context.Trainers.FindAsync(id);
         if (trainer == null)
             return NotFound();

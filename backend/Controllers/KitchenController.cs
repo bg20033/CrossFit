@@ -1,11 +1,11 @@
 using Microsoft.AspNetCore.Authorization;
 using System.ComponentModel.DataAnnotations;
-using System.Security.Claims;
 using System.Text.Json;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using StandUpFitness.Data;
 using StandUpFitness.Models;
+using StandUpFitness.Services;
 
 namespace StandUpFitness.Controllers;
 
@@ -17,17 +17,11 @@ public class KitchenController : ControllerBase
     private readonly FitnessContext _context;
     public KitchenController(FitnessContext context) => _context = context;
 
-    private int? Uid()
-    {
-        var c = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-        return int.TryParse(c, out var id) ? id : null;
-    }
-
     // ---- Recipes ----
     [HttpGet("recipes")]
     public async Task<IActionResult> Recipes()
     {
-        var uid = Uid();
+        var uid = User.CurrentUserId();
         if (uid == null) return Forbid();
         var rows = await _context.Recipes
             .Where(r => r.UserId == uid)
@@ -40,7 +34,7 @@ public class KitchenController : ControllerBase
     [HttpPost("recipes")]
     public async Task<IActionResult> CreateRecipe([FromBody] RecipeRequest request)
     {
-        var uid = Uid();
+        var uid = User.CurrentUserId();
         if (uid == null) return Forbid();
         if (string.IsNullOrWhiteSpace(request.Name)) return BadRequest(new { message = "Name required" });
         if (request.Servings < 1 || request.Servings > 100) return BadRequest(new { message = "Servings must be between 1 and 100" });
@@ -69,7 +63,7 @@ public class KitchenController : ControllerBase
     [HttpDelete("recipes/{id}")]
     public async Task<IActionResult> DeleteRecipe(int id)
     {
-        var uid = Uid();
+        var uid = User.CurrentUserId();
         var r = await _context.Recipes.FindAsync(id);
         if (r == null) return NotFound();
         if (r.UserId != uid) return Forbid();
@@ -82,7 +76,7 @@ public class KitchenController : ControllerBase
     [HttpGet("shopping")]
     public async Task<IActionResult> Shopping()
     {
-        var uid = Uid();
+        var uid = User.CurrentUserId();
         if (uid == null) return Forbid();
         var rows = await _context.ShoppingItems
             .Where(s => s.UserId == uid)
@@ -95,7 +89,7 @@ public class KitchenController : ControllerBase
     [HttpPost("shopping")]
     public async Task<IActionResult> AddShopping([FromBody] ShoppingRequest request)
     {
-        var uid = Uid();
+        var uid = User.CurrentUserId();
         if (uid == null) return Forbid();
         if (string.IsNullOrWhiteSpace(request.Name)) return BadRequest(new { message = "Name required" });
         var name = request.Name.Trim();
@@ -110,7 +104,7 @@ public class KitchenController : ControllerBase
     [HttpPut("shopping/{id}")]
     public async Task<IActionResult> ToggleShopping(int id, [FromBody] ShoppingToggle request)
     {
-        var uid = Uid();
+        var uid = User.CurrentUserId();
         var item = await _context.ShoppingItems.FindAsync(id);
         if (item == null) return NotFound();
         if (item.UserId != uid) return Forbid();
@@ -122,7 +116,7 @@ public class KitchenController : ControllerBase
     [HttpDelete("shopping/{id}")]
     public async Task<IActionResult> DeleteShopping(int id)
     {
-        var uid = Uid();
+        var uid = User.CurrentUserId();
         var item = await _context.ShoppingItems.FindAsync(id);
         if (item == null) return NotFound();
         if (item.UserId != uid) return Forbid();

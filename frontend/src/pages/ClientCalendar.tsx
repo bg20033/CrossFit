@@ -105,7 +105,7 @@ export default function ClientCalendar() {
         badge="Klient"
         title="Kalendari im"
         subtitle="Sa herë ke ardhur dhe sa rregullt je."
-        right={
+        right={profileId != null ? (
           <div className="flex items-center gap-2">
             {(data?.currentStreak ?? 0) > 0 && <StreakBadge days={data!.currentStreak} label="ditë" />}
             <button
@@ -115,7 +115,7 @@ export default function ClientCalendar() {
               ICS
             </button>
           </div>
-        }
+        ) : undefined}
       />
 
       <Panel title="Njoftime për orarin" action={<Badge>{notices.length}</Badge>}>

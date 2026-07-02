@@ -221,7 +221,7 @@ export default function ClientGoals() {
       <Panel
         title="Lista e qëllimeve"
         action={
-          <div className="flex gap-1 rounded-lg bg-gray-100 p-1">
+          <div className="flex max-w-full flex-wrap gap-1 rounded-lg bg-gray-100 p-1">
             {FILTERS.map((f) => (
               <button
                 key={f.key}

@@ -6,7 +6,7 @@ import {
   ScanLine,
   User,
   Apple,
-  Dumbbell,
+  Mail,
 } from 'lucide-react'
 
 const clientTabs = [
@@ -20,8 +20,8 @@ const clientTabs = [
 const tenantClientTabs = [
   { to: '/dashboard', label: 'Home', icon: Home },
   { to: '/calendar', label: 'Orari', icon: CalendarDays },
-  { to: '/workouts', label: 'Plani', icon: Dumbbell },
   { to: '/nutrition', label: 'Ushqimi', icon: Apple },
+  { to: '/messages', label: 'Mesazhe', icon: Mail },
 ]
 
 export default function ClientBottomTabs({ role }: { role: UserRole | undefined }) {
@@ -30,7 +30,7 @@ export default function ClientBottomTabs({ role }: { role: UserRole | undefined 
 
   return (
     <nav className="fixed inset-x-3 bottom-3 z-30 rounded-[28px] border border-gray-200 bg-white px-2 py-2 md:hidden">
-      <div className="grid grid-cols-5 gap-1">
+      <div className="grid gap-1" style={{ gridTemplateColumns: `repeat(${tabs.length}, minmax(0, 1fr))` }}>
         {tabs.map((tab) => {
           const Icon = tab.icon
           return (

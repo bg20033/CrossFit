@@ -42,6 +42,11 @@ class ApiService {
     return { ...data, role: normalizeRole(data.role) as UserRole }
   }
 
+  async getPermissions(): Promise<string[]> {
+    const { data } = await this.client.get('/roles/me/permissions')
+    return Array.isArray(data?.permissions) ? data.permissions : []
+  }
+
   async updateProfile(data: { name?: string; email?: string }): Promise<User> {
     const res = await this.client.put('/auth/profile', data)
     return res.data

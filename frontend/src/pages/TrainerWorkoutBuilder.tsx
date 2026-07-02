@@ -408,9 +408,9 @@ export default function TrainerWorkoutBuilder() {
                                   </span>
                                 </h4>
                                 <p className="text-sm text-gray-600">
-                                  {exercise.sets} sets × {exercise.reps} reps
+                                  {exercise.sets} seri × {exercise.reps} përsëritje
                                   {exercise.weight && ` @ ${exercise.weight}`}
-                                  {exercise.restSeconds ? ` | Rest: ${exercise.restSeconds}s` : ''}
+                                  {exercise.restSeconds ? ` | Pushim: ${exercise.restSeconds}s` : ''}
                                 </p>
                               </div>
                               <button

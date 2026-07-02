@@ -21,21 +21,23 @@ public class CalendarController : ControllerBase
         _context = context;
     }
 
-    private int? CurrentUserId()
-    {
-        var claim = User.FindFirst(ClaimTypes.NameIdentifier);
-        return int.TryParse(claim?.Value, out var id) ? id : null;
-    }
-
     [Authorize(Policy = "AdminTrainer")]
     [HttpGet("groups.ics")]
     public async Task<IActionResult> GroupsIcs([FromQuery] int weeks = 8)
     {
-        var groups = await _context.TrainingGroups
+        IQueryable<TrainingGroup> query = _context.TrainingGroups
             .Include(g => g.Trainer).ThenInclude(t => t.User)
             .Include(g => g.ScheduleSlots)
-            .AsNoTracking()
-            .ToListAsync();
+            .AsNoTracking();
+
+        if (!User.CanManageCoreScope(permission: "schedule.write"))
+        {
+            var trainerId = await _context.CurrentCoreTrainerIdAsync(User);
+            if (trainerId == null) return Forbid();
+            query = query.Where(g => g.TrainerId == trainerId.Value);
+        }
+
+        var groups = await query.ToListAsync();
         return IcsFile(groups.SelectMany(g => GroupEvents(
             g, $"group-{g.Id}", $"{g.Trainer.User.Name} · Kapaciteti {g.MaxCapacity}", weeks
         )), "standup-groups.ics");
@@ -45,7 +47,7 @@ public class CalendarController : ControllerBase
     [HttpGet("me.ics")]
     public async Task<IActionResult> MyIcs([FromQuery] int weeks = 8)
     {
-        var userId = CurrentUserId();
+        var userId = User.CurrentUserId();
         if (userId == null) return Unauthorized();
 
         var client = await _context.Clients

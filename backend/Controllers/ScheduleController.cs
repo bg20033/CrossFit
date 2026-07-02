@@ -26,7 +26,7 @@ public class ScheduleController : ControllerBase
         return Ok(rows);
     }
 
-    [Authorize(Policy = "AdminTrainer")]
+    [Authorize(Policy = "AdminOnly")]
     [HttpPost]
     public async Task<IActionResult> Create([FromBody] SessionRequest request)
     {
@@ -49,7 +49,7 @@ public class ScheduleController : ControllerBase
     }
 
     // PUT: api/schedule/{id} — reschedule (drag-drop) or edit
-    [Authorize(Policy = "AdminTrainer")]
+    [Authorize(Policy = "AdminOnly")]
     [HttpPut("{id}")]
     public async Task<IActionResult> Update(int id, [FromBody] SessionRequest request)
     {
@@ -69,7 +69,7 @@ public class ScheduleController : ControllerBase
         return Ok(new { message = "Updated" });
     }
 
-    [Authorize(Policy = "AdminTrainer")]
+    [Authorize(Policy = "AdminOnly")]
     [HttpDelete("{id}")]
     public async Task<IActionResult> Delete(int id)
     {

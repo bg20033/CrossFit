@@ -1,40 +1,44 @@
 import { Link } from 'react-router-dom'
 
+const anchorLinks = [
+  { hash: '#programs', label: 'Programet' },
+  { hash: '#coaches', label: 'Trajnerët' },
+  { hash: '#pricing', label: 'Anëtarësia' },
+  { hash: '#contact', label: 'Kontakti' },
+]
+
+const pageLinks = [
+  { to: '/about', label: 'Rreth Nesh' },
+  { to: '/rental', label: 'Qira e Hapësirës' },
+  { to: '/login', label: 'Kyçu' },
+  { to: '/register', label: 'Regjistrohu' },
+]
+
 export default function PublicFooter() {
   return (
-    <footer className="border-t border-gray-800 bg-gray-900 text-gray-400">
-      <div className="mx-auto grid max-w-7xl grid-cols-1 gap-8 px-4 py-12 md:grid-cols-4 md:px-6">
-        <div className="md:col-span-2">
-          <div className="flex items-center gap-2 text-lg font-extrabold text-white">
-            <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-white text-base">💪</span>
-            StandUp CrossFit
-          </div>
-          <p className="mt-3 max-w-sm text-sm">
-            Platforma e plotë për menaxhimin e palestrës — klientë, trajnerë, orare,
-            financa dhe progres, të gjitha në një vend.
-          </p>
+    <footer className="bg-cocoa text-cream">
+      <div className="mx-auto flex max-w-[1200px] flex-wrap items-center justify-between gap-8 px-6 pb-10 pt-14">
+        <div className="flex items-center gap-2.5">
+          <span className="grid h-[34px] w-[34px] place-items-center rounded-[9px] bg-clay font-newsreader text-xl text-cream">S</span>
+          <span className="text-base font-bold">Stand Up CrossFit</span>
         </div>
 
-        <div>
-          <h4 className="mb-3 text-sm font-semibold text-white">Lidhje</h4>
-          <ul className="space-y-2 text-sm">
-            <li><Link to="/" className="hover:text-white">Ballina</Link></li>
-            <li><Link to="/about" className="hover:text-white">Rreth Nesh</Link></li>
-            <li><Link to="/rental" className="hover:text-white">Qira e Hapësirës</Link></li>
-          </ul>
+        <div className="flex flex-wrap gap-x-[26px] gap-y-2 text-sm font-medium">
+          {anchorLinks.map((l) => (
+            <Link key={l.hash} to={{ pathname: '/', hash: l.hash }} className="text-cream/80 transition hover:text-cream">
+              {l.label}
+            </Link>
+          ))}
+          {pageLinks.map((l) => (
+            <Link key={l.to} to={l.to} className="text-cream/80 transition hover:text-cream">
+              {l.label}
+            </Link>
+          ))}
         </div>
 
-        <div>
-          <h4 className="mb-3 text-sm font-semibold text-white">Llogaria</h4>
-          <ul className="space-y-2 text-sm">
-            <li><Link to="/login" className="hover:text-white">Kyçu</Link></li>
-            <li><Link to="/register" className="hover:text-white">Regjistrohu</Link></li>
-          </ul>
+        <div className="text-[13px] text-cream/55">
+          © {new Date().getFullYear()} Stand Up CrossFit · Prishtinë
         </div>
-      </div>
-
-      <div className="border-t border-gray-800 py-4 text-center text-xs text-gray-500">
-        © {new Date().getFullYear()} StandUp CrossFit. Të gjitha të drejtat e rezervuara.
       </div>
     </footer>
   )

@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using StandUpFitness.Data;
 using StandUpFitness.Models;
+using StandUpFitness.Services;
 
 namespace StandUpFitness.Controllers;
 
@@ -18,23 +19,6 @@ public class WorkoutPlansController : ControllerBase
         _context = context;
     }
 
-    private bool IsStaffOrAbove() =>
-        User.IsInRole("Admin") || User.IsInRole("GymOwner") || User.IsInRole("Trainer") || User.IsInRole("Staff");
-
-    private async Task<int?> OwnClientIdAsync()
-    {
-        var uid = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
-        if (!int.TryParse(uid, out var userId)) return null;
-        return await _context.Clients.Where(c => c.UserId == userId).Select(c => (int?)c.Id).FirstOrDefaultAsync();
-    }
-
-    private async Task<bool> CanAccessClientAsync(int clientId)
-    {
-        if (IsStaffOrAbove()) return true;
-        var own = await OwnClientIdAsync();
-        return own == clientId;
-    }
-
     // GET: api/workoutplans?trainerId=1&clientId=5
     [HttpGet]
     public async Task<IActionResult> GetWorkoutPlans(
@@ -44,9 +28,21 @@ public class WorkoutPlansController : ControllerBase
         [FromQuery] int pageSize = 10)
     {
         // A client may only ever list their own plans, never another client's.
-        if (!IsStaffOrAbove())
+        if (User.CanManageCoreScope(includeStaff: true, permission: "workouts.write"))
         {
-            var own = await OwnClientIdAsync();
+            // Admin/staff/custom workout managers may use the requested filters.
+        }
+        else if (User.IsInRole("Trainer"))
+        {
+            var ownTrainerId = await _context.CurrentCoreTrainerIdAsync(User);
+            if (ownTrainerId == null) return Forbid();
+            if (trainerId.HasValue && trainerId.Value != ownTrainerId.Value) return Forbid();
+            if (clientId.HasValue && !await _context.TrainerCanAccessClientAsync(User, clientId.Value)) return Forbid();
+            trainerId = ownTrainerId;
+        }
+        else
+        {
+            var own = await _context.OwnClientIdAsync(User);
             if (own == null) return Forbid();
             clientId = own;
             trainerId = null;
@@ -96,7 +92,7 @@ public class WorkoutPlansController : ControllerBase
 
         if (plan == null)
             return NotFound();
-        if (!await CanAccessClientAsync(plan.ClientId)) return Forbid();
+        if (!await _context.CanAccessCoreClientAsync(User, plan.ClientId, managerPermission: "workouts.write")) return Forbid();
 
         return Ok(new
         {
@@ -126,6 +122,12 @@ public class WorkoutPlansController : ControllerBase
         var client = await _context.Clients.FindAsync(request.ClientId);
         if (client == null)
             return BadRequest("Client not found");
+        if (!User.CanManageCoreScope(permission: "workouts.write"))
+        {
+            var ownTrainerId = await _context.CurrentCoreTrainerIdAsync(User);
+            if (ownTrainerId == null || request.TrainerId != ownTrainerId.Value || !await _context.TrainerCanAccessClientAsync(User, request.ClientId))
+                return Forbid();
+        }
 
         var plan = new WorkoutPlan
         {
@@ -154,6 +156,7 @@ public class WorkoutPlansController : ControllerBase
         var plan = await _context.WorkoutPlans.FindAsync(id);
         if (plan == null)
             return NotFound();
+        if (!await _context.CanAccessCoreTrainerAsync(User, plan.TrainerId, "workouts.write")) return Forbid();
 
         plan.Name = request.Name ?? plan.Name;
         plan.Description = request.Description ?? plan.Description;
@@ -176,6 +179,7 @@ public class WorkoutPlansController : ControllerBase
         var plan = await _context.WorkoutPlans.FindAsync(id);
         if (plan == null)
             return NotFound();
+        if (!await _context.CanAccessCoreTrainerAsync(User, plan.TrainerId, "workouts.write")) return Forbid();
 
         plan.IsActive = true;
         plan.StartDate = DateTime.UtcNow;
@@ -194,6 +198,7 @@ public class WorkoutPlansController : ControllerBase
         var plan = await _context.WorkoutPlans.FindAsync(id);
         if (plan == null)
             return NotFound();
+        if (!await _context.CanAccessCoreTrainerAsync(User, plan.TrainerId, "workouts.write")) return Forbid();
 
         _context.WorkoutPlans.Remove(plan);
         await _context.SaveChangesAsync();
@@ -211,7 +216,7 @@ public class WorkoutPlansController : ControllerBase
 
         if (plan == null)
             return NotFound();
-        if (!await CanAccessClientAsync(plan.ClientId)) return Forbid();
+        if (!await _context.CanAccessCoreClientAsync(User, plan.ClientId, managerPermission: "workouts.write")) return Forbid();
 
         // For now, return JSON with plan data
         // PDF generation happens on frontend with jsPDF

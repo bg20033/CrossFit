@@ -148,8 +148,9 @@ export default function ClientPackageStatus() {
   const handleRenew = async () => {
     setRenewing(true)
     try {
-      await api.post('/memberships/renew', { currentId: current?.id })
-      addNotification('Sukses', 'Kërkesa për rinovim u dërgua. Trajneri do të konfirmojë.', 'success')
+      const res = await api.post('/memberships/renew', { currentId: current?.id })
+      // Paketa aktivizohet pas pagesës (fatura pending) — jo menjëherë.
+      addNotification('Sukses', res.data?.message || 'Fatura u krijua — paguaj në recepsion për aktivizim.', 'success')
     } catch {
       addNotification('Gabim', 'Rinovimi dështoi. Provo përsëri.', 'error')
     } finally {
@@ -159,8 +160,8 @@ export default function ClientPackageStatus() {
 
   const selectOffer = async (offer: Offer) => {
     try {
-      await api.post('/memberships/upgrade', { offerId: offer.id, clientId: profileId })
-      addNotification('Sukses', `Kërkesa për "${packageLabel(offer.name)}" u dërgua.`, 'success')
+      const res = await api.post('/memberships/upgrade', { offerId: offer.id, clientId: profileId })
+      addNotification('Sukses', res.data?.message || `Kërkesa për "${packageLabel(offer.name)}" u dërgua — paguaj në recepsion.`, 'success')
     } catch {
       addNotification('Gabim', 'Kërkesa dështoi. Provo përsëri.', 'error')
     }

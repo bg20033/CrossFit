@@ -31,6 +31,11 @@ export function hasRole(userRole: UserRole | undefined, allowed: UserRole[]): bo
   return allowed.includes(userRole)
 }
 
+export function hasPermission(userPermissions: string[] | undefined, allowed: string[]): boolean {
+  if (!userPermissions || userPermissions.length === 0) return false
+  return allowed.some((permission) => userPermissions.includes(permission) || userPermissions.includes('system.admin'))
+}
+
 // Role groups (the server must enforce the same boundaries — see README → Data Isolation).
 export const ADMIN_ROLES: UserRole[] = ['admin', 'gym_owner']
 export const TRAINER_ROLES: UserRole[] = ['trainer']

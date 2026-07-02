@@ -90,9 +90,9 @@ export function Panel({
 }) {
   return (
     <div className={`rounded-2xl border border-gray-200 bg-white p-6 ${className}`}>
-      <div className="mb-4 flex items-center justify-between gap-3">
-        <h2 className="text-lg font-semibold text-gray-900">{title}</h2>
-        {action}
+      <div className="mb-4 flex min-w-0 flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <h2 className="min-w-0 text-lg font-semibold text-gray-900">{title}</h2>
+        {action && <div className="max-w-full">{action}</div>}
       </div>
       {children}
     </div>

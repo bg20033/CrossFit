@@ -113,8 +113,7 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
   }, [])
 
   useEffect(() => {
-    const token = localStorage.getItem('authToken')
-    if (!token) return
+    if (!localStorage.getItem('authToken')) return
 
     api.get('/notifications/unread-count')
       .then((res) => {
@@ -122,31 +121,59 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
       })
       .catch(() => undefined)
 
-    const stream = new EventSource(`${API_BASE_URL}/notifications/stream?access_token=${encodeURIComponent(token)}`)
-    stream.addEventListener('notification', (event) => {
-      try {
-        const n = JSON.parse((event as MessageEvent).data)
-        const notification = fromServerNotification(n)
-        if (!notification) return
-        setNotifications((prev) => {
-          if (prev.some((row) => row.id === notification.id)) return prev
-          return pushToast(prev, notification)
-        })
-        setUnreadCount((count) => count + 1)
-      } catch {
-        // Ignore malformed stream events.
+    // Live stream with reconnect. The old `onerror = () => stream.close()`
+    // killed notifications permanently on the FIRST hiccup (server restart,
+    // token rotation, network blip). Now we close and reopen with the current
+    // token after a backoff.
+    let stream: EventSource | null = null
+    let retryTimer: number | undefined
+    let retryDelayMs = 5_000
+    let disposed = false
+
+    const connect = () => {
+      if (disposed) return
+      const token = localStorage.getItem('authToken')
+      if (!token) return
+
+      stream = new EventSource(`${API_BASE_URL}/notifications/stream?access_token=${encodeURIComponent(token)}`)
+      stream.addEventListener('notification', (event) => {
+        try {
+          const n = JSON.parse((event as MessageEvent).data)
+          const notification = fromServerNotification(n)
+          if (!notification) return
+          setNotifications((prev) => {
+            if (prev.some((row) => row.id === notification.id)) return prev
+            return pushToast(prev, notification)
+          })
+          setUnreadCount((count) => count + 1)
+        } catch {
+          // Ignore malformed stream events.
+        }
+      })
+      stream.addEventListener('unread', (event) => {
+        try {
+          const data = JSON.parse((event as MessageEvent).data)
+          setUnreadCount(Number(data.count ?? 0))
+          retryDelayMs = 5_000 // healthy again → reset backoff
+        } catch {
+          // Ignore malformed stream events.
+        }
+      })
+      stream.onerror = () => {
+        stream?.close()
+        stream = null
+        if (disposed) return
+        retryTimer = window.setTimeout(connect, retryDelayMs)
+        retryDelayMs = Math.min(retryDelayMs * 2, 60_000)
       }
-    })
-    stream.addEventListener('unread', (event) => {
-      try {
-        const data = JSON.parse((event as MessageEvent).data)
-        setUnreadCount(Number(data.count ?? 0))
-      } catch {
-        // Ignore malformed stream events.
-      }
-    })
-    stream.onerror = () => stream.close()
-    return () => stream.close()
+    }
+
+    connect()
+    return () => {
+      disposed = true
+      if (retryTimer) window.clearTimeout(retryTimer)
+      stream?.close()
+    }
   }, [])
 
   return (

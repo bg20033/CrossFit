@@ -1,7 +1,8 @@
-import { Building, CheckCircle, Mail, Plus, Star, Trash2, Users } from 'lucide-react'
+import { Building, CheckCircle, Mail, Pencil, Plus, Receipt, Star, Trash2, Users } from 'lucide-react'
 import { useState, useEffect } from 'react'
 import { Button } from '../components/ui/button'
 import { useNotification } from '../contexts/NotificationContext'
+import TeamTabs from '../components/app/TeamTabs'
 import api from '../utils/api'
 import { shortDate } from '../utils/format'
 import {
@@ -38,10 +39,32 @@ interface Tenant {
   trainer: string
   businessName: string
   contractStatus: string
+  contractStart: string
+  contractEnd: string | null
   monthlyRate: number
   slots: TenantSlot[]
   balanceDue: number
 }
+interface RentInvoice {
+  id: number
+  invoiceNumber: string
+  amount: number
+  periodStart: string
+  periodEnd: string
+  dueDate: string
+  status: string
+  paidAt: string | null
+}
+
+const CONTRACT_STATUSES = [
+  { key: 'pending', label: 'Në pritje' },
+  { key: 'active', label: 'Aktiv' },
+  { key: 'blocked', label: 'Bllokuar' },
+  { key: 'ended', label: 'Përfunduar' },
+]
+const contractLabel: Record<string, string> = Object.fromEntries(CONTRACT_STATUSES.map((s) => [s.key, s.label]))
+const invoiceStatusLabel: Record<string, string> = { pending: 'Në pritje', paid: 'Paguar', overdue: 'Vonesë', void: 'Anuluar' }
+const monthLabel = (iso: string) => new Date(iso).toLocaleDateString('sq-AL', { month: 'long', year: 'numeric' })
 interface UserOption {
   id: number
   name: string
@@ -53,9 +76,10 @@ const STATUSES = [
   { key: 'new', label: 'Të reja' },
   { key: 'contacted', label: 'Kontaktuar' },
   { key: 'approved', label: 'Aprovuar' },
+  { key: 'converted', label: 'Konvertuar' },
   { key: 'rejected', label: 'Refuzuar' },
 ]
-const statusLabel: Record<string, string> = { new: 'I ri', contacted: 'Kontaktuar', approved: 'Aprovuar', rejected: 'Refuzuar' }
+const statusLabel: Record<string, string> = { new: 'I ri', contacted: 'Kontaktuar', approved: 'Aprovuar', converted: 'Konvertuar', rejected: 'Refuzuar' }
 
 const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
 const DAY_AL: Record<string, string> = {
@@ -77,7 +101,15 @@ interface SlotForm {
   end: string
 }
 const newSlot = (): SlotForm => ({ dayOfWeek: 'Monday', start: '18:00', end: '19:30' })
-const emptyTenantForm = () => ({ id: 0, userId: '', businessName: '', monthlyRate: '0', slots: [newSlot()] })
+const emptyTenantForm = () => ({
+  id: 0,
+  userId: '',
+  businessName: '',
+  monthlyRate: '0',
+  contractStatus: 'active',
+  contractEnd: '',
+  slots: [newSlot()],
+})
 type TenantForm = ReturnType<typeof emptyTenantForm>
 
 export default function AdminRentals() {
@@ -92,6 +124,17 @@ export default function AdminRentals() {
   const [showTenantForm, setShowTenantForm] = useState(false)
   const [tenantForm, setTenantForm] = useState<TenantForm>(emptyTenantForm())
   const [tenantError, setTenantError] = useState('')
+  // Convert mode: kërkesa që po kthehet në qiragji (modal i njëjtë, submit tjetër).
+  const [convertFor, setConvertFor] = useState<Inquiry | null>(null)
+  const [tenantPassword, setTenantPassword] = useState('')
+  // Edit mode: qiragjia ekzistuese që po ndryshohet (modal i njëjtë, submit PUT).
+  const [editFor, setEditFor] = useState<Tenant | null>(null)
+  // Faturat e qirasë të qiragjisë së zgjedhur (modal më vete, arkëtim nga admini).
+  const [invoicesFor, setInvoicesFor] = useState<Tenant | null>(null)
+  const [invoices, setInvoices] = useState<RentInvoice[]>([])
+  const [invoicesLoading, setInvoicesLoading] = useState(false)
+  const [payMethod, setPayMethod] = useState('cash')
+  const [payingId, setPayingId] = useState<number | null>(null)
 
   useEffect(() => {
     fetchItems()
@@ -139,7 +182,70 @@ export default function AdminRentals() {
   const openCreateTenant = () => {
     setTenantForm(emptyTenantForm())
     setTenantError('')
+    setConvertFor(null)
+    setEditFor(null)
+    setTenantPassword('')
     setShowTenantForm(true)
+  }
+
+  // Hap modalin e qiragjisë të parambushur nga një kërkesë publike.
+  const openConvert = (q: Inquiry) => {
+    setTenantForm({ ...emptyTenantForm(), businessName: q.name })
+    setTenantError('')
+    setConvertFor(q)
+    setEditFor(null)
+    setTenantPassword('')
+    setShowTenantForm(true)
+  }
+
+  // Hap modalin e qiragjisë të parambushur nga qiragjia ekzistuese (ndryshim).
+  const openEdit = (t: Tenant) => {
+    setTenantForm({
+      id: t.id,
+      userId: String(t.userId),
+      businessName: t.businessName,
+      monthlyRate: String(t.monthlyRate),
+      contractStatus: t.contractStatus,
+      contractEnd: t.contractEnd ? t.contractEnd.slice(0, 10) : '',
+      slots: t.slots.length > 0
+        ? t.slots.map((s) => ({ dayOfWeek: s.dayOfWeek, start: minToHHMM(s.startMin), end: minToHHMM(s.endMin) }))
+        : [newSlot()],
+    })
+    setTenantError('')
+    setConvertFor(null)
+    setEditFor(t)
+    setTenantPassword('')
+    setShowTenantForm(true)
+  }
+
+  const openInvoices = async (t: Tenant) => {
+    setInvoicesFor(t)
+    setPayMethod('cash')
+    try {
+      setInvoicesLoading(true)
+      const res = await api.get(`/rentals/tenants/${t.id}/invoices`)
+      setInvoices(Array.isArray(res.data) ? res.data : [])
+    } catch {
+      setInvoices([])
+    } finally {
+      setInvoicesLoading(false)
+    }
+  }
+
+  const payInvoice = async (invoiceId: number) => {
+    if (!invoicesFor) return
+    try {
+      setPayingId(invoiceId)
+      await api.post(`/rentals/invoices/${invoiceId}/pay`, { paymentMethod: payMethod })
+      addNotification('Sukses', 'Qiraja u arkëtua dhe u regjistrua në Financa.', 'success')
+      const res = await api.get(`/rentals/tenants/${invoicesFor.id}/invoices`)
+      setInvoices(Array.isArray(res.data) ? res.data : [])
+      fetchTenants()
+    } catch (err: any) {
+      addNotification('Gabim', err.response?.data?.message || 'Arkëtimi dështoi.', 'error')
+    } finally {
+      setPayingId(null)
+    }
   }
 
   const addSlotRow = () => setTenantForm((f) => ({ ...f, slots: [...f.slots, newSlot()] }))
@@ -151,7 +257,7 @@ export default function AdminRentals() {
   const submitTenant = async (e: React.FormEvent) => {
     e.preventDefault()
     setTenantError('')
-    if (!tenantForm.userId) {
+    if (!convertFor && !editFor && !tenantForm.userId) {
       setTenantError('Zgjedh një përdorues për ta bërë qiragji.')
       return
     }
@@ -161,15 +267,35 @@ export default function AdminRentals() {
         return
       }
     }
-    const body = {
-      userId: parseInt(tenantForm.userId),
-      businessName: tenantForm.businessName || undefined,
-      monthlyRate: parseFloat(tenantForm.monthlyRate) || 0,
-      slots: tenantForm.slots.map((s) => ({ dayOfWeek: s.dayOfWeek, startMin: hhmmToMin(s.start), endMin: hhmmToMin(s.end) })),
-    }
+    const slots = tenantForm.slots.map((s) => ({ dayOfWeek: s.dayOfWeek, startMin: hhmmToMin(s.start), endMin: hhmmToMin(s.end) }))
     try {
-      await api.post('/rentals/tenants', body)
-      addNotification('Sukses', 'Qiragjia u krijua.', 'success')
+      if (editFor) {
+        await api.put(`/rentals/tenants/${editFor.id}`, {
+          businessName: tenantForm.businessName || undefined,
+          monthlyRate: parseFloat(tenantForm.monthlyRate) || 0,
+          contractStatus: tenantForm.contractStatus,
+          contractEnd: tenantForm.contractEnd || undefined,
+          slots,
+        })
+        addNotification('Sukses', 'Qiragjia u përditësua.', 'success')
+      } else if (convertFor) {
+        await api.post(`/rentals/${convertFor.id}/convert`, {
+          businessName: tenantForm.businessName || undefined,
+          monthlyRate: parseFloat(tenantForm.monthlyRate) || 0,
+          password: tenantPassword || undefined,
+          slots,
+        })
+        addNotification('Sukses', `Kërkesa e ${convertFor.name} u konvertua në qiragji.`, 'success')
+        fetchItems()
+      } else {
+        await api.post('/rentals/tenants', {
+          userId: parseInt(tenantForm.userId),
+          businessName: tenantForm.businessName || undefined,
+          monthlyRate: parseFloat(tenantForm.monthlyRate) || 0,
+          slots,
+        })
+        addNotification('Sukses', 'Qiragjia u krijua.', 'success')
+      }
       setShowTenantForm(false)
       fetchTenants()
     } catch (err: any) {
@@ -178,6 +304,8 @@ export default function AdminRentals() {
   }
 
   const newCount = items.filter((i) => i.status === 'new').length
+  const tenantUserIds = new Set(tenants.map((t) => t.userId))
+  const tenantCandidates = users.filter((u) => u.baselineRole === 'Trainer' && !tenantUserIds.has(u.id))
 
   return (
     <DashboardShell>
@@ -187,6 +315,8 @@ export default function AdminRentals() {
         subtitle="Kërkesat për qira, dhe qiragjinjtë aktivë me orarin e tyre javor."
         right={<Button onClick={openCreateTenant} className={primaryBtn}>+ Qiragji i ri</Button>}
       />
+
+      <TeamTabs />
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         <StatCard icon={<Mail className="h-5 w-5" />} label="Gjithsej kërkesa" value={loading ? '…' : items.length} />
@@ -205,7 +335,9 @@ export default function AdminRentals() {
               <div key={t.id} className="rounded-xl border border-gray-200 p-5">
                 <div className="flex items-start justify-between">
                   <h3 className="text-lg font-semibold text-gray-900">{t.businessName}</h3>
-                  <Badge accent={t.contractStatus === 'active' ? 'green' : 'gray'}>{t.contractStatus}</Badge>
+                  <Badge accent={t.contractStatus === 'active' ? 'green' : t.contractStatus === 'blocked' ? 'orange' : 'gray'}>
+                    {contractLabel[t.contractStatus] ?? t.contractStatus}
+                  </Badge>
                 </div>
                 <p className="mt-1 text-sm text-gray-500">Qiragji: {t.trainer} · €{t.monthlyRate}/muaj</p>
                 <div className="mt-3 flex flex-wrap gap-1.5">
@@ -222,6 +354,14 @@ export default function AdminRentals() {
                 {t.balanceDue > 0 && (
                   <div className="mt-3"><Badge accent="orange">Borxh €{t.balanceDue}</Badge></div>
                 )}
+                <div className="mt-4 flex gap-2 border-t border-gray-100 pt-3">
+                  <Button size="sm" variant="outline" onClick={() => openEdit(t)}>
+                    <Pencil className="mr-1 h-4 w-4" /> Ndrysho
+                  </Button>
+                  <Button size="sm" variant="outline" onClick={() => openInvoices(t)}>
+                    <Receipt className="mr-1 h-4 w-4" /> Qiratë
+                  </Button>
+                </div>
               </div>
             ))}
           </div>
@@ -251,14 +391,21 @@ export default function AdminRentals() {
               <div key={q.id} className="rounded-xl border border-gray-200 p-4">
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div>
-                    <p className="font-semibold text-gray-900">{q.name} <Badge accent={q.status === 'approved' ? 'green' : 'gray'}>{statusLabel[q.status] ?? q.status}</Badge></p>
+                    <p className="font-semibold text-gray-900">{q.name} <Badge accent={q.status === 'approved' || q.status === 'converted' ? 'green' : 'gray'}>{statusLabel[q.status] ?? q.status}</Badge></p>
                     <p className="text-sm text-gray-500">{q.email} · {q.phone || '—'}</p>
                     <p className="mt-2 text-sm text-gray-700">{q.message}</p>
                     <p className="mt-1 text-xs text-gray-400">{shortDate(q.createdAt)}</p>
                   </div>
-                  <select value={q.status} onChange={(e) => setStatus(q.id, e.target.value)} className={`${fieldCls} w-40`}>
-                    {STATUSES.map((s) => <option key={s.key} value={s.key}>{s.label}</option>)}
-                  </select>
+                  <div className="flex flex-col items-end gap-2">
+                    <select value={q.status} onChange={(e) => setStatus(q.id, e.target.value)} className={`${fieldCls} w-40`}>
+                      {STATUSES.map((s) => <option key={s.key} value={s.key}>{s.label}</option>)}
+                    </select>
+                    {q.status !== 'converted' && q.status !== 'rejected' && (
+                      <Button size="sm" variant="outline" onClick={() => openConvert(q)}>
+                        <Users className="mr-1 h-4 w-4" /> Bëje qiragji
+                      </Button>
+                    )}
+                  </div>
                 </div>
               </div>
             ))}
@@ -267,17 +414,65 @@ export default function AdminRentals() {
       </Panel>
 
       {showTenantForm && (
-        <Modal title="Krijo qiragji të ri" onClose={() => setShowTenantForm(false)}>
+        <Modal
+          title={editFor ? `Ndrysho qiragjinë: ${editFor.businessName}` : convertFor ? `Bëje qiragji: ${convertFor.name}` : 'Krijo qiragji të ri'}
+          onClose={() => setShowTenantForm(false)}
+        >
           <form onSubmit={submitTenant} className="space-y-4">
             {tenantError && (
               <div className="rounded-lg border border-gray-300 bg-gray-100 px-4 py-2.5 text-sm text-gray-800">{tenantError}</div>
             )}
-            <Field label="Përdoruesi">
-              <select value={tenantForm.userId} onChange={(e) => setTenantForm({ ...tenantForm, userId: e.target.value })} required className={fieldCls}>
-                <option value="" disabled>Zgjedh përdoruesin…</option>
-                {users.map((u) => <option key={u.id} value={u.id}>{u.name} ({u.email}) · {u.baselineRole}</option>)}
-              </select>
-            </Field>
+            {editFor ? (
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <Field label="Statusi i kontratës">
+                  <select
+                    value={tenantForm.contractStatus}
+                    onChange={(e) => setTenantForm({ ...tenantForm, contractStatus: e.target.value })}
+                    className={fieldCls}
+                  >
+                    {CONTRACT_STATUSES.map((s) => <option key={s.key} value={s.key}>{s.label}</option>)}
+                  </select>
+                </Field>
+                <Field label="Mbarimi i kontratës (opsional)">
+                  <input
+                    type="date"
+                    value={tenantForm.contractEnd}
+                    onChange={(e) => setTenantForm({ ...tenantForm, contractEnd: e.target.value })}
+                    className={fieldCls}
+                  />
+                </Field>
+              </div>
+            ) : convertFor ? (
+              <>
+                <div className="rounded-lg bg-gray-50 px-4 py-3 text-sm text-gray-700">
+                  Nga kërkesa e <span className="font-semibold">{convertFor.name}</span> · {convertFor.email}
+                  {convertFor.phone ? ` · ${convertFor.phone}` : ''}
+                  <p className="mt-1 text-xs text-gray-500">
+                    Nëse ekziston llogari trajneri me këtë email, lidhet ajo — përndryshe krijohet llogari e re me rolin Qiragji.
+                  </p>
+                </div>
+                <Field label="Fjalëkalimi i përkohshëm (për llogari të re, min. 8 karaktere)">
+                  <input
+                    type="text"
+                    value={tenantPassword}
+                    onChange={(e) => setTenantPassword(e.target.value)}
+                    placeholder="p.sh. Qiragji2026!"
+                    minLength={8}
+                    className={fieldCls}
+                  />
+                </Field>
+              </>
+            ) : (
+              <Field label="Përdoruesi">
+                <select value={tenantForm.userId} onChange={(e) => setTenantForm({ ...tenantForm, userId: e.target.value })} required className={fieldCls}>
+                  <option value="" disabled>Zgjedh përdoruesin…</option>
+                  {tenantCandidates.map((u) => <option key={u.id} value={u.id}>{u.name} ({u.email}) · Trajner</option>)}
+                </select>
+                {tenantCandidates.length === 0 && (
+                  <p className="mt-2 text-xs text-gray-500">S'ka trajner të lirë për qiragji. Krijo një trajner te “Trajnerët”, pastaj ktheje në qiragji këtu — ose konverto direkt një kërkesë nga lista më poshtë.</p>
+                )}
+              </Field>
+            )}
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <Field label="Emri i hapësirës">
                 <input value={tenantForm.businessName} onChange={(e) => setTenantForm({ ...tenantForm, businessName: e.target.value })} placeholder="p.sh. Studio e Ardit" className={fieldCls} />
@@ -288,7 +483,7 @@ export default function AdminRentals() {
             </div>
 
             <div>
-              <div className="mb-2 flex items-center justify-between">
+              <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
                 <label className="text-sm font-medium text-gray-700">Orari javor (sa herë në javë, koha, kohëzgjatja)</label>
                 <Button type="button" size="sm" variant="outline" onClick={addSlotRow}>
                   <Plus className="mr-1 h-4 w-4" /> Terminë
@@ -296,7 +491,7 @@ export default function AdminRentals() {
               </div>
               <div className="space-y-2">
                 {tenantForm.slots.map((s, i) => (
-                  <div key={i} className="grid grid-cols-[1fr_auto_auto_auto] items-center gap-2 rounded-lg border border-gray-200 p-2">
+                  <div key={i} className="grid grid-cols-1 items-center gap-2 rounded-lg border border-gray-200 p-2 sm:grid-cols-[1fr_auto_auto_auto]">
                     <select value={s.dayOfWeek} onChange={(e) => changeSlot(i, 'dayOfWeek', e.target.value)} className={fieldCls}>
                       {DAYS.map((d) => <option key={d} value={d}>{DAY_AL[d]}</option>)}
                     </select>
@@ -318,9 +513,61 @@ export default function AdminRentals() {
 
             <div className="flex justify-end gap-2 pt-2">
               <Button type="button" variant="outline" onClick={() => setShowTenantForm(false)}>Anulo</Button>
-              <Button type="submit" className={primaryBtn}>Krijo qiragjinë</Button>
+              <Button type="submit" className={primaryBtn}>
+                {editFor ? 'Ruaj ndryshimet' : convertFor ? 'Konverto në qiragji' : 'Krijo qiragjinë'}
+              </Button>
             </div>
           </form>
+        </Modal>
+      )}
+
+      {invoicesFor && (
+        <Modal title={`Qiratë: ${invoicesFor.businessName}`} onClose={() => setInvoicesFor(null)}>
+          <div className="space-y-4">
+            <Field label="Mënyra e pagesës (për arkëtim)">
+              <select value={payMethod} onChange={(e) => setPayMethod(e.target.value)} className={fieldCls}>
+                <option value="cash">Kesh (Arka)</option>
+                <option value="card">Kartelë</option>
+                <option value="bank">Bankë</option>
+              </select>
+            </Field>
+
+            {invoicesLoading ? (
+              <p className="py-6 text-center text-sm text-gray-400">Duke ngarkuar…</p>
+            ) : invoices.length === 0 ? (
+              <EmptyState
+                icon={<Receipt className="h-5 w-5" />}
+                text="Ende s'ka fatura qiraje. Gjenerohen automatikisht në fillim të çdo muaji për kontratat aktive."
+              />
+            ) : (
+              <div className="space-y-2">
+                {invoices.map((inv) => (
+                  <div key={inv.id} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-gray-200 p-4">
+                    <div>
+                      <p className="font-semibold text-gray-900">
+                        {monthLabel(inv.periodStart)}{' '}
+                        <Badge accent={inv.status === 'paid' ? 'green' : inv.status === 'overdue' ? 'orange' : 'gray'}>
+                          {invoiceStatusLabel[inv.status] ?? inv.status}
+                        </Badge>
+                      </p>
+                      <p className="text-xs text-gray-400">
+                        {inv.invoiceNumber} · afati {shortDate(inv.dueDate)}
+                        {inv.paidAt ? ` · paguar ${shortDate(inv.paidAt)}` : ''}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <span className="font-semibold text-gray-900">€{inv.amount}</span>
+                      {(inv.status === 'pending' || inv.status === 'overdue') && (
+                        <Button size="sm" onClick={() => payInvoice(inv.id)} disabled={payingId === inv.id} className={primaryBtn}>
+                          {payingId === inv.id ? 'Duke arkëtuar…' : 'Paguaj'}
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         </Modal>
       )}
     </DashboardShell>

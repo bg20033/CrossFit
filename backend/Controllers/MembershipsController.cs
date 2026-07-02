@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using StandUpFitness.Data;
 using StandUpFitness.Models;
+using StandUpFitness.Services;
 
 namespace StandUpFitness.Controllers;
 
@@ -16,6 +17,14 @@ public class MembershipsController : ControllerBase
     public MembershipsController(FitnessContext context)
     {
         _context = context;
+    }
+
+    private async Task<decimal> ResolveDiscountedPriceAsync(Client client, MembershipPlan plan)
+    {
+        var discount = await _context.DiscountCategories
+            .FirstOrDefaultAsync(d => d.Key == client.DiscountCategory && d.IsActive);
+        var percent = discount?.DiscountPercent ?? 0m;
+        return plan.Price * (1 - percent / 100m);
     }
 
     [HttpGet("current")]
@@ -93,6 +102,13 @@ public class MembershipsController : ControllerBase
         return Ok(new { clientId, autoRenew = request.AutoRenew });
     }
 
+    // Renewal used to extend the membership IMMEDIATELY and only then create a
+    // pending invoice — so a client could extend their own package for free from
+    // the app (revenue leak), and marking that invoice paid later would extend it
+    // AGAIN. Now both renew and upgrade only create a pending membership invoice;
+    // the extension/switch is applied exactly once by InvoicePaymentService when
+    // the invoice is actually paid (mark-paid or a desk checkout). Zero-price
+    // plans have nothing to pay, so they still apply instantly.
     [HttpPost("renew")]
     public async Task<IActionResult> Renew([FromBody] RenewRequest request)
     {
@@ -101,20 +117,32 @@ public class MembershipsController : ControllerBase
         if (!await CanAccessClientAsync(client.Id)) return Forbid();
 
         var plan = await ResolvePlanAsync(client);
-        var durationDays = plan?.DurationDays > 0 ? plan.DurationDays : 30;
-        var baseDate = client.MembershipExpiry.HasValue && client.MembershipExpiry.Value > DateTime.UtcNow
-            ? client.MembershipExpiry.Value
-            : DateTime.UtcNow;
+        if (plan == null || plan.Price <= 0)
+        {
+            ApplyPlanNow(client, plan);
+            await _context.SaveChangesAsync();
+            return Ok(await ShapeCurrentAsync(client));
+        }
 
-        client.MembershipExpiry = baseDate.AddDays(durationDays);
-        client.IsActive = true;
-        client.UpdatedAt = DateTime.UtcNow;
+        var discountedPrice = await ResolveDiscountedPriceAsync(client, plan);
+        if (discountedPrice <= 0)
+        {
+            ApplyPlanNow(client, plan);
+            await _context.SaveChangesAsync();
+            return Ok(await ShapeCurrentAsync(client));
+        }
 
-        if (plan != null && plan.Price > 0)
-            _context.Invoices.Add(CreateMembershipInvoice(client.Id, plan));
-
+        var invoice = await GetOrCreatePendingMembershipInvoiceAsync(client.Id, plan, discountedPrice);
         await _context.SaveChangesAsync();
-        return Ok(await ShapeCurrentAsync(client));
+
+        return Ok(new
+        {
+            current = await ShapeCurrentAsync(client),
+            pendingInvoiceId = invoice.Id,
+            pendingInvoiceNumber = invoice.InvoiceNumber,
+            amountDue = invoice.TotalAmount,
+            message = "Fatura u krijua — pakoja aktivizohet pas pagesës në recepsion."
+        });
     }
 
     [HttpPost("upgrade")]
@@ -127,18 +155,85 @@ public class MembershipsController : ControllerBase
         var plan = await _context.MembershipPlans.FindAsync(request.OfferId);
         if (plan == null || !plan.IsActive) return BadRequest(new { message = "Membership plan not found" });
 
-        client.PlanId = plan.Id;
-        client.Plan = plan;
-        client.MembershipType = plan.Name;
-        client.MembershipExpiry = DateTime.UtcNow.AddDays(plan.DurationDays);
-        client.IsActive = true;
-        client.UpdatedAt = DateTime.UtcNow;
+        if (plan.Price <= 0)
+        {
+            ApplyPlanNow(client, plan);
+            await _context.SaveChangesAsync();
+            return Ok(await ShapeCurrentAsync(client));
+        }
 
-        if (plan.Price > 0)
-            _context.Invoices.Add(CreateMembershipInvoice(client.Id, plan));
+        var discountedPrice = await ResolveDiscountedPriceAsync(client, plan);
+        if (discountedPrice <= 0)
+        {
+            ApplyPlanNow(client, plan);
+            await _context.SaveChangesAsync();
+            return Ok(await ShapeCurrentAsync(client));
+        }
 
+        var invoice = await GetOrCreatePendingMembershipInvoiceAsync(client.Id, plan, discountedPrice);
         await _context.SaveChangesAsync();
-        return Ok(await ShapeCurrentAsync(client));
+
+        return Ok(new
+        {
+            current = await ShapeCurrentAsync(client),
+            pendingInvoiceId = invoice.Id,
+            pendingInvoiceNumber = invoice.InvoiceNumber,
+            amountDue = invoice.TotalAmount,
+            message = "Fatura u krijua — pakoja e re aktivizohet pas pagesës në recepsion."
+        });
+    }
+
+    private static void ApplyPlanNow(Client client, MembershipPlan? plan)
+    {
+        var durationDays = plan?.DurationDays > 0 ? plan.DurationDays : 30;
+        // I njëjti rregull grace si InvoicePaymentService (shih MembershipDates).
+        var baseDate = MembershipDates.RenewalBase(client.MembershipExpiry, DateTime.UtcNow);
+
+        client.MembershipExpiry = baseDate.AddDays(durationDays);
+        client.IsActive = true;
+        if (plan != null)
+        {
+            client.PlanId = plan.Id;
+            client.MembershipType = plan.Name;
+        }
+        client.UpdatedAt = DateTime.UtcNow;
+    }
+
+    // Dedupe: repeated renew clicks reuse the existing unpaid invoice for the
+    // same plan instead of piling up pending invoices.
+    private async Task<Invoice> GetOrCreatePendingMembershipInvoiceAsync(int clientId, MembershipPlan plan, decimal price)
+    {
+        var description = $"{plan.Name} membership";
+        // Items duhen ngarkuar bashkë me faturën: pa Include, ndryshimi i çmimit
+        // (p.sh. u korrigjua përqindja e zbritjes) përditësonte TotalAmount por
+        // e linte artikullin me çmimin e vjetër (Items bosh → FirstOrDefault null).
+        // Faturat me [membership-applied] (expiry u caktua me dorë në krijim)
+        // NUK ripërdoren: pagesa e tyre s'e zgjat pakon, kështu që "rinovimi"
+        // që binte mbi to nuk bënte asgjë — simptoma klasike e rinovimit të prishur.
+        var existing = await _context.Invoices
+            .Include(i => i.Items)
+            .FirstOrDefaultAsync(i => i.ClientId == clientId && i.Status == "pending" && i.Description == description
+                && (i.Notes == null || !i.Notes.Contains("[membership-applied]")));
+        if (existing != null)
+        {
+            // Update amount if discount changed since the invoice was first created.
+            if (existing.TotalAmount != price)
+            {
+                existing.Subtotal = price;
+                existing.TotalAmount = price;
+                var item = existing.Items.FirstOrDefault();
+                if (item != null)
+                {
+                    item.UnitPrice = price;
+                    item.Total = price;
+                }
+            }
+            return existing;
+        }
+
+        var invoice = CreateMembershipInvoice(clientId, plan, price);
+        _context.Invoices.Add(invoice);
+        return invoice;
     }
 
     private async Task<Client?> ResolveClientAsync(int? clientId)
@@ -151,7 +246,7 @@ public class MembershipsController : ControllerBase
                 .FirstOrDefaultAsync(c => c.Id == clientId.Value);
         }
 
-        var userId = CurrentUserId();
+        var userId = User.CurrentUserId();
         if (userId == null) return null;
 
         return await _context.Clients
@@ -203,16 +298,16 @@ public class MembershipsController : ControllerBase
         };
     }
 
-    private Invoice CreateMembershipInvoice(int clientId, MembershipPlan plan)
+    private Invoice CreateMembershipInvoice(int clientId, MembershipPlan plan, decimal price)
     {
         var invoice = new Invoice
         {
-            InvoiceNumber = $"INV-{DateTime.UtcNow:yyyyMMddHHmmss}-{Random.Shared.Next(1000, 9999)}",
+            InvoiceNumber = Services.DocumentNumbers.Invoice(),
             ClientId = clientId,
             Description = $"{plan.Name} membership",
-            Subtotal = plan.Price,
+            Subtotal = price,
             TaxAmount = 0,
-            TotalAmount = plan.Price,
+            TotalAmount = price,
             Status = "pending",
             DueDate = DateTime.UtcNow.AddDays(7),
             PaymentMethod = "cash"
@@ -222,35 +317,20 @@ public class MembershipsController : ControllerBase
         {
             Description = $"{plan.Name} membership",
             Quantity = 1,
-            UnitPrice = plan.Price,
-            Total = plan.Price
+            UnitPrice = price,
+            Total = price
         });
 
         return invoice;
     }
 
     private async Task<bool> CanAccessClientAsync(int clientId)
-    {
-        if (User.IsInRole("Admin") || User.IsInRole("GymOwner") || User.IsInRole("Staff") || User.IsInRole("Cashier"))
-            return true;
-
-        var userId = CurrentUserId();
-        if (userId == null) return false;
-
-        if (User.IsInRole("Client"))
-            return await _context.Clients.AnyAsync(c => c.Id == clientId && c.UserId == userId.Value);
-
-        if (User.IsInRole("Trainer"))
-            return await _context.Clients.AnyAsync(c => c.Id == clientId && c.Trainer != null && c.Trainer.UserId == userId.Value);
-
-        return false;
-    }
-
-    private int? CurrentUserId()
-    {
-        var claim = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier);
-        return int.TryParse(claim?.Value, out var id) ? id : null;
-    }
+        => await _context.CanAccessCoreClientAsync(
+            User,
+            clientId,
+            includeStaff: true,
+            includeCashier: true,
+            includeTrainerGroupClients: false);
 }
 
 public class AutoRenewRequest

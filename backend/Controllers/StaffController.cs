@@ -4,19 +4,22 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using StandUpFitness.Data;
 using StandUpFitness.Models;
+using StandUpFitness.Services;
 
 namespace StandUpFitness.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
-[Authorize(Policy = "AdminOnly")]
+[Authorize(Policy = "StaffManage")]
 public class StaffController : ControllerBase
 {
     private readonly FitnessContext _context;
+    private readonly IFinanceService _finance;
 
-    public StaffController(FitnessContext context)
+    public StaffController(FitnessContext context, IFinanceService finance)
     {
         _context = context;
+        _finance = finance;
     }
 
     // GET: api/staff?page=1&pageSize=10
@@ -47,6 +50,7 @@ public class StaffController : ControllerBase
                 s.Position,
                 s.Salary,
                 s.IsActive,
+                Role = s.User.Role.ToString(),
                 s.HireDate,
                 s.CreatedAt
             })
@@ -95,12 +99,16 @@ public class StaffController : ControllerBase
             return BadRequest(new { message = "Email already exists" });
 
         var passwordHash = BCrypt.Net.BCrypt.HashPassword(request.Password);
+        var role = ParseDeskRole(request.Role);
+        if (role == null)
+            return BadRequest(new { message = "Role must be Staff or Cashier" });
+
         var user = new User
         {
             Email = email,
             Name = request.Name.Trim(),
             PasswordHash = passwordHash,
-            Role = UserRole.Staff
+            Role = role.Value
         };
 
         var staff = new Staff
@@ -138,6 +146,13 @@ public class StaffController : ControllerBase
             return BadRequest(new { message = "Salary cannot be negative" });
         staff.Salary = request.Salary ?? staff.Salary;
         staff.IsActive = request.IsActive ?? staff.IsActive;
+        if (!string.IsNullOrWhiteSpace(request.Role))
+        {
+            var role = ParseDeskRole(request.Role);
+            if (role == null)
+                return BadRequest(new { message = "Role must be Staff or Cashier" });
+            staff.User.Role = role.Value;
+        }
 
         staff.UpdatedAt = DateTime.UtcNow;
         await _context.SaveChangesAsync();
@@ -173,7 +188,9 @@ public class StaffController : ControllerBase
             query = query.Where(s => s.Month == month);
 
         var salaries = await query
-            .OrderByDescending(s => new { s.Year, s.Month })
+            // OrderByDescending(anonymous type) is untranslatable in EF Core and
+            // threw at runtime — order by the two columns explicitly.
+            .OrderByDescending(s => s.Year).ThenByDescending(s => s.Month)
             .Select(s => new
             {
                 s.Id,
@@ -205,7 +222,10 @@ public class StaffController : ControllerBase
         if (request.HoursWorked < 0 || request.OvertimeHours < 0 || request.Bonus < 0 || request.Deductions < 0)
             return BadRequest(new { message = "Payroll values cannot be negative" });
 
-        // Check if salary already calculated for this period
+        // One salary row per staff/period (unique index). Recalculating while
+        // still pending UPDATES that row — the old code inserted a second one and
+        // crashed on the unique index, which made the Payroll page silently fail
+        // on every load after the first.
         var existing = await _context.Salaries
             .FirstOrDefaultAsync(s => s.StaffId == id && s.Year == request.Year && s.Month == request.Month);
 
@@ -216,28 +236,24 @@ public class StaffController : ControllerBase
         var overtimeAmount = request.OvertimeHours * staff.Salary * 1.5m / 160; // Assuming 160 hours/month
         var totalAmount = baseSalary + overtimeAmount + request.Bonus - request.Deductions;
 
-        var salary = new Salary
-        {
-            StaffId = id,
-            Year = request.Year,
-            Month = request.Month,
-            BaseSalary = baseSalary,
-            HoursWorked = request.HoursWorked,
-            HourlyRate = staff.Salary / 160, // Approximate hourly rate
-            OvertimeHours = request.OvertimeHours,
-            Bonus = request.Bonus,
-            Deductions = request.Deductions,
-            TotalAmount = totalAmount,
-            Status = "pending",
-            Notes = request.Notes?.Trim()
-        };
+        var salary = existing ?? new Salary { StaffId = id, Year = request.Year, Month = request.Month };
+        salary.BaseSalary = baseSalary;
+        salary.HoursWorked = request.HoursWorked;
+        salary.HourlyRate = staff.Salary / 160; // Approximate hourly rate
+        salary.OvertimeHours = request.OvertimeHours;
+        salary.Bonus = request.Bonus;
+        salary.Deductions = request.Deductions;
+        salary.TotalAmount = totalAmount;
+        salary.Status = "pending";
+        salary.Notes = request.Notes?.Trim();
 
-        _context.Salaries.Add(salary);
+        if (existing == null) _context.Salaries.Add(salary);
         await _context.SaveChangesAsync();
 
         return Ok(new
         {
             message = "Salary calculated successfully",
+            id = salary.Id,
             totalAmount = totalAmount,
             breakdown = new
             {
@@ -248,6 +264,45 @@ public class StaffController : ControllerBase
             }
         });
     }
+
+    // POST: api/staff/salaries/{salaryId}/pay
+    // Marks the salary paid AND books it as a Finance expense ("Salaries") so
+    // payroll shows up in the gym's books — wages and all other spending must
+    // flow into Finance.
+    [HttpPost("salaries/{salaryId:int}/pay")]
+    public async Task<IActionResult> PaySalary(int salaryId, [FromBody] PaySalaryRequest? request)
+    {
+        var salary = await _context.Salaries
+            .Include(s => s.Staff).ThenInclude(st => st.User)
+            .FirstOrDefaultAsync(s => s.Id == salaryId);
+        if (salary == null) return NotFound();
+        if (salary.Status == "paid") return BadRequest(new { message = "Salary already paid" });
+        if (salary.Status == "cancelled") return BadRequest(new { message = "Salary is cancelled" });
+
+        var userId = User.CurrentUserId();
+
+        await _finance.RecordExpenseAsync(
+            FinanceService.Salaries,
+            salary.TotalAmount,
+            $"Rroga — {salary.Staff.User.Name} ({salary.Year}-{salary.Month:D2})",
+            request?.PaymentMethod ?? "cash",
+            userId);
+
+        salary.Status = "paid";
+        salary.PaidDate = DateTime.UtcNow;
+        await _context.SaveChangesAsync();
+
+        return Ok(new { message = "Rroga u pagua dhe u regjistrua si shpenzim", totalAmount = salary.TotalAmount });
+    }
+
+    private static UserRole? ParseDeskRole(string? role)
+    {
+        if (string.IsNullOrWhiteSpace(role)) return UserRole.Staff;
+        var normalized = role.Trim().Replace("_", "").Replace("-", "").Replace(" ", "");
+        if (!Enum.TryParse<UserRole>(normalized, ignoreCase: true, out var parsed))
+            return null;
+        return parsed is UserRole.Staff or UserRole.Cashier ? parsed : null;
+    }
 }
 
 public class CreateStaffRequest
@@ -257,6 +312,7 @@ public class CreateStaffRequest
     [Required, MinLength(8), MaxLength(128)] public string Password { get; set; } = null!;
     [Required, MaxLength(80)] public string Position { get; set; } = null!;
     [Range(0, 1_000_000)] public decimal Salary { get; set; }
+    public string? Role { get; set; }
 }
 
 public class UpdateStaffRequest
@@ -265,6 +321,7 @@ public class UpdateStaffRequest
     public string? Position { get; set; }
     public decimal? Salary { get; set; }
     public bool? IsActive { get; set; }
+    public string? Role { get; set; }
 }
 
 public class CalculateSalaryRequest
@@ -276,4 +333,9 @@ public class CalculateSalaryRequest
     public decimal Bonus { get; set; } = 0;
     public decimal Deductions { get; set; } = 0;
     public string? Notes { get; set; }
+}
+
+public class PaySalaryRequest
+{
+    [MaxLength(30)] public string? PaymentMethod { get; set; }
 }

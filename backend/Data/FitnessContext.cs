@@ -25,6 +25,9 @@ public class FitnessContext : DbContext
     public DbSet<CashRegister> CashRegisters { get; set; } = null!;
     public DbSet<Invoice> Invoices { get; set; } = null!;
     public DbSet<InvoiceItem> InvoiceItems { get; set; } = null!;
+    public DbSet<Product> Products { get; set; } = null!;
+    public DbSet<StockMovement> StockMovements { get; set; } = null!;
+    public DbSet<DiscountCategory> DiscountCategories { get; set; } = null!;
     public DbSet<Expense> Expenses { get; set; } = null!;
     public DbSet<Salary> Salaries { get; set; } = null!;
     public DbSet<AttendanceLog> AttendanceLogs { get; set; } = null!;
@@ -130,6 +133,9 @@ public class FitnessContext : DbContext
         modelBuilder.Entity<Invoice>().Property(i => i.TotalAmount).HasPrecision(18, 2);
         modelBuilder.Entity<InvoiceItem>().Property(i => i.UnitPrice).HasPrecision(18, 2);
         modelBuilder.Entity<InvoiceItem>().Property(i => i.Total).HasPrecision(18, 2);
+        modelBuilder.Entity<Product>().Property(p => p.SalePrice).HasPrecision(18, 2);
+        modelBuilder.Entity<Product>().Property(p => p.CostPrice).HasPrecision(18, 2);
+        modelBuilder.Entity<StockMovement>().Property(s => s.UnitCost).HasPrecision(18, 2);
         modelBuilder.Entity<Trainer>().Property(t => t.HourlyRate).HasPrecision(18, 2);
         modelBuilder.Entity<Trainer>().Property(t => t.CommissionPerClient).HasPrecision(18, 2);
         modelBuilder.Entity<Trainer>().Property(t => t.PaymentModel).HasMaxLength(20);
@@ -387,6 +393,46 @@ public class FitnessContext : DbContext
             .WithMany(i => i.Items)
             .HasForeignKey(ii => ii.InvoiceId)
             .OnDelete(DeleteBehavior.Cascade);
+
+        // DiscountCategory configuration
+        modelBuilder.Entity<DiscountCategory>(e =>
+        {
+            e.HasIndex(d => d.Key).IsUnique();
+            e.Property(d => d.Key).HasMaxLength(40);
+            e.Property(d => d.Name).HasMaxLength(120);
+            e.HasData(
+                new DiscountCategory { Id = 1, Key = "standard", Name = "Standarde", DiscountPercent = 0, IsBuiltIn = true, IsActive = true },
+                new DiscountCategory { Id = 2, Key = "police", Name = "Policia (zbritje)", DiscountPercent = 20, IsBuiltIn = true, IsActive = true },
+                new DiscountCategory { Id = 3, Key = "free", Name = "Falas (0€)", DiscountPercent = 100, IsBuiltIn = true, IsActive = true },
+                new DiscountCategory { Id = 4, Key = "shared", Name = "E ndarë (3–4)", DiscountPercent = 0, IsBuiltIn = true, IsActive = true },
+                new DiscountCategory { Id = 5, Key = "session_pass", Name = "Pako seancash", DiscountPercent = 0, IsBuiltIn = true, IsActive = true }
+            );
+        });
+
+        modelBuilder.Entity<InvoiceItem>()
+            .HasOne(ii => ii.Product)
+            .WithMany(p => p.InvoiceItems)
+            .HasForeignKey(ii => ii.ProductId)
+            .OnDelete(DeleteBehavior.SetNull);
+
+        // Product / StockMovement configuration
+        modelBuilder.Entity<StockMovement>()
+            .HasOne(s => s.Product)
+            .WithMany(p => p.StockMovements)
+            .HasForeignKey(s => s.ProductId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        modelBuilder.Entity<StockMovement>()
+            .HasOne(s => s.Staff)
+            .WithMany()
+            .HasForeignKey(s => s.StaffId)
+            .OnDelete(DeleteBehavior.SetNull);
+
+        modelBuilder.Entity<StockMovement>()
+            .HasOne(s => s.InvoiceItem)
+            .WithMany(i => i.StockMovements)
+            .HasForeignKey(s => s.InvoiceItemId)
+            .OnDelete(DeleteBehavior.SetNull);
 
         // Expense configuration
         modelBuilder.Entity<Expense>()

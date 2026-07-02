@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using StandUpFitness.Data;
 using StandUpFitness.Models;
+using StandUpFitness.Services;
 
 namespace StandUpFitness.Controllers;
 
@@ -18,22 +19,11 @@ public class ProgressController : ControllerBase
         _context = context;
     }
 
-    // Staff/Trainer/Admin can access any client; a Client may only access their own data.
-    private async Task<bool> CanAccessClientAsync(int clientId)
-    {
-        if (User.IsInRole("Admin") || User.IsInRole("GymOwner") || User.IsInRole("Trainer") || User.IsInRole("Staff"))
-            return true;
-        var uid = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
-        if (!int.TryParse(uid, out var userId)) return false;
-        var own = await _context.Clients.Where(c => c.UserId == userId).Select(c => (int?)c.Id).FirstOrDefaultAsync();
-        return own == clientId;
-    }
-
     // GET: api/progress?clientId=1
     [HttpGet]
     public async Task<IActionResult> GetLogs([FromQuery] int clientId)
     {
-        if (!await CanAccessClientAsync(clientId)) return Forbid();
+        if (!await _context.CanAccessCoreClientAsync(User, clientId)) return Forbid();
         var logs = await _context.ProgressLogs
             .Where(p => p.ClientId == clientId)
             .OrderByDescending(p => p.Date)
@@ -64,7 +54,7 @@ public class ProgressController : ControllerBase
     {
         var validation = ValidateProgress(request);
         if (validation != null) return validation;
-        if (!await CanAccessClientAsync(request.ClientId)) return Forbid();
+        if (!await _context.CanAccessCoreClientAsync(User, request.ClientId)) return Forbid();
         var log = new ProgressLog
         {
             ClientId = request.ClientId,
@@ -122,7 +112,7 @@ public class ProgressController : ControllerBase
     {
         var log = await _context.ProgressLogs.FindAsync(id);
         if (log == null) return NotFound();
-        if (!await CanAccessClientAsync(log.ClientId)) return Forbid();
+        if (!await _context.CanAccessCoreClientAsync(User, log.ClientId)) return Forbid();
         _context.ProgressLogs.Remove(log);
         await _context.SaveChangesAsync();
         return Ok(new { message = "Deleted" });

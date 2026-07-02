@@ -1,5 +1,17 @@
-import { ArrowDownRight, ArrowUpRight, Banknote, Circle, Landmark, Receipt } from 'lucide-react'
-import { useState, useEffect } from 'react'
+import {
+  ArrowDownRight,
+  ArrowUpRight,
+  Banknote,
+  Circle,
+  Landmark,
+  Receipt,
+  User,
+  Search,
+  ShoppingCart,
+  Trash2,
+  Plus,
+} from 'lucide-react'
+import { useState, useEffect, useMemo } from 'react'
 import { Button } from '../components/ui/button'
 import { useNotification } from '../contexts/NotificationContext'
 import api from '../utils/api'
@@ -38,6 +50,25 @@ interface Tx {
   createdAt: string
 }
 
+interface Product {
+  id: number
+  name: string
+  unit?: string
+  salePrice: number
+  stock: number
+  isActive: boolean
+}
+
+interface ClientLite {
+  id: number
+  name: string
+}
+
+interface CartItem {
+  product: Product
+  quantity: number
+}
+
 export default function AdminCashRegister() {
   const { addNotification } = useNotification()
   const [current, setCurrent] = useState<Register | null>(null)
@@ -48,9 +79,26 @@ export default function AdminCashRegister() {
   const [opening, setOpening] = useState('0')
   const [closing, setClosing] = useState('0')
 
+  // POS state
+  const [products, setProducts] = useState<Product[]>([])
+  const [clients, setClients] = useState<ClientLite[]>([])
+  const [clientId, setClientId] = useState('')
+  const [selectedProductId, setSelectedProductId] = useState('')
+  const [quantity, setQuantity] = useState('1')
+  const [cart, setCart] = useState<CartItem[]>([])
+  const [paymentMethod, setPaymentMethod] = useState('cash')
+  const [posLoading, setPosLoading] = useState(false)
+
   useEffect(() => {
     load()
   }, [])
+
+  useEffect(() => {
+    if (current) {
+      api.get('/inventory/products').then((r) => setProducts(Array.isArray(r.data) ? r.data : [])).catch(() => setProducts([]))
+      api.get('/clients?pageSize=200').then((r) => setClients(r.data?.clients ?? [])).catch(() => setClients([]))
+    }
+  }, [current])
 
   const load = async () => {
     setLoading(true)
@@ -66,7 +114,7 @@ export default function AdminCashRegister() {
   }
 
   const refund = async (tx: Tx) => {
-    const raw = window.prompt(`Shuma për refund (max ${tx.amount}€):`, String(tx.amount))
+    const raw = window.prompt(`Shuma për rimbursim (max ${tx.amount}€):`, String(tx.amount))
     if (raw == null) return
     const amount = toDecimal(raw)
     if (isNaN(amount) || amount <= 0 || amount > tx.amount) {
@@ -75,11 +123,11 @@ export default function AdminCashRegister() {
     }
     try {
       await api.post(`/payments/${tx.id}/refund`, { amount })
-      addNotification('Refund', `U kthyen ${amount}€ për kuponin ${tx.receiptNumber ?? tx.id}.`, 'success')
+      addNotification('Rimbursim', `U kthyen ${amount}€ për kuponin ${tx.receiptNumber ?? tx.id}.`, 'success')
       load()
     } catch (err: any) {
       const data = err.response?.data
-      addNotification(data?.needsAdmin ? 'Kërkon admin' : 'Gabim', data?.message || 'Refund dështoi.', 'error')
+      addNotification(data?.needsAdmin ? 'Kërkon admin' : 'Gabim', data?.message || 'Rimbursimi dështoi.', 'error')
     }
   }
 
@@ -108,6 +156,66 @@ export default function AdminCashRegister() {
     }
   }
 
+  const addToCart = () => {
+    const product = products.find((p) => p.id === Number(selectedProductId))
+    const qty = parseInt(quantity || '0', 10)
+    if (!product || qty <= 0) {
+      addNotification('Gabim', 'Zgjedh një produkt dhe sasi të vlefshme.', 'error')
+      return
+    }
+    if (qty > product.stock) {
+      addNotification('Gabim', `Stok i pamjaftueshëm për "${product.name}". Në dispozicion: ${product.stock}`, 'error')
+      return
+    }
+    setCart((prev) => {
+      const existing = prev.find((i) => i.product.id === product.id)
+      if (existing) {
+        return prev.map((i) => (i.product.id === product.id ? { ...i, quantity: i.quantity + qty } : i))
+      }
+      return [...prev, { product, quantity: qty }]
+    })
+    setSelectedProductId('')
+    setQuantity('1')
+  }
+
+  const removeFromCart = (productId: number) => {
+    setCart((prev) => prev.filter((i) => i.product.id !== productId))
+  }
+
+  const cartTotal = useMemo(
+    () => cart.reduce((sum, i) => sum + i.quantity * i.product.salePrice, 0),
+    [cart]
+  )
+
+  const checkout = async () => {
+    if (!current) return
+    if (!clientId) {
+      addNotification('Gabim', 'Zgjedh klientin për shitjen.', 'error')
+      return
+    }
+    if (cart.length === 0) {
+      addNotification('Gabim', 'Shporta është bosh.', 'error')
+      return
+    }
+    setPosLoading(true)
+    try {
+      const res = await api.post('/payments/pos-checkout', {
+        clientId: parseInt(clientId, 10),
+        method: paymentMethod,
+        items: cart.map((i) => ({ productId: i.product.id, quantity: i.quantity })),
+        idempotencyKey: `pos-${current.id}-${Date.now()}`,
+      })
+      addNotification('Sukses', `Pagesa u regjistrua. Kuponi: ${res.data.receiptNumber}`, 'success')
+      setCart([])
+      setClientId('')
+      load()
+    } catch (err: any) {
+      addNotification('Gabim', err.response?.data?.message || 'Pagesa dështoi.', 'error')
+    } finally {
+      setPosLoading(false)
+    }
+  }
+
   return (
     <DashboardShell>
       <DashboardHeader badge="Recepsion" title="Arka" subtitle="Hap, mbyll dhe ndiq arkën ditore." />
@@ -124,6 +232,118 @@ export default function AdminCashRegister() {
             <StatCard icon={<ArrowUpRight className="h-5 w-5" />} label="Të hyra" value={eur(current.totalIncome ?? 0)} />
             <StatCard icon={<ArrowDownRight className="h-5 w-5" />} label="Dalje" value={eur(current.totalExpense ?? 0)} />
           </div>
+
+          <Panel title="Shitje në arkë (POS)">
+            <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+              <div className="space-y-4">
+                <Field label="Klienti">
+                  <div className="relative">
+                    <User className="absolute left-3 top-2.5 h-4 w-4 text-gray-400" />
+                    <select
+                      value={clientId}
+                      onChange={(e) => setClientId(e.target.value)}
+                      required
+                      className={`${fieldCls} pl-9`}
+                    >
+                      <option value="" disabled>Zgjedh klientin…</option>
+                      {clients.map((c) => (
+                        <option key={c.id} value={c.id}>{c.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                </Field>
+
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                  <div className="sm:col-span-2">
+                  <Field label="Produkti">
+                    <div className="relative">
+                      <Search className="absolute left-3 top-2.5 h-4 w-4 text-gray-400" />
+                      <select
+                        value={selectedProductId}
+                        onChange={(e) => setSelectedProductId(e.target.value)}
+                        className={`${fieldCls} pl-9`}
+                      >
+                        <option value="">Zgjedh produktin…</option>
+                        {products
+                          .filter((p) => p.isActive !== false && p.stock > 0)
+                          .map((p) => (
+                            <option key={p.id} value={p.id}>
+                              {p.name} — {eur(p.salePrice)} (stok: {p.stock})
+                            </option>
+                          ))}
+                      </select>
+                    </div>
+                  </Field>
+                  </div>
+                  <Field label="Sasia">
+                    <input
+                      type="number"
+                      min={1}
+                      value={quantity}
+                      onChange={(e) => setQuantity(e.target.value)}
+                      className={fieldCls}
+                    />
+                  </Field>
+                </div>
+                <Button type="button" variant="outline" onClick={addToCart}>
+                  <Plus className="mr-2 h-4 w-4" /> Shto në shportë
+                </Button>
+              </div>
+
+              <div className="space-y-4">
+                <p className="text-sm font-medium text-gray-700">Shporta</p>
+                {cart.length === 0 ? (
+                  <EmptyState icon={<ShoppingCart className="h-5 w-5" />} text="Shporta është bosh." />
+                ) : (
+                  <div className="overflow-x-auto rounded-lg border border-gray-200">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="border-b border-gray-100 text-left text-xs uppercase tracking-wide text-gray-400">
+                          <th className="px-3 py-2 font-semibold">Produkti</th>
+                          <th className="px-3 py-2 font-semibold">Sasia</th>
+                          <th className="px-3 py-2 font-semibold">Totali</th>
+                          <th className="px-3 py-2"></th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-50">
+                        {cart.map((i) => (
+                          <tr key={i.product.id}>
+                            <td className="px-3 py-2 text-gray-800">{i.product.name}</td>
+                            <td className="px-3 py-2 text-gray-600">{i.quantity}</td>
+                            <td className="px-3 py-2 font-medium text-gray-800">{eur(i.quantity * i.product.salePrice)}</td>
+                            <td className="px-3 py-2 text-right">
+                              <button onClick={() => removeFromCart(i.product.id)} className="text-gray-400 hover:text-gray-700">
+                                <Trash2 className="h-4 w-4" />
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+                <div className="flex items-center justify-between rounded-lg bg-gray-50 p-3 text-sm font-semibold text-gray-900">
+                  <span>Totali</span>
+                  <span>{eur(cartTotal)}</span>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <Field label="Metoda e pagesës">
+                    <select value={paymentMethod} onChange={(e) => setPaymentMethod(e.target.value)} className={fieldCls}>
+                      <option value="cash">Kontant</option>
+                      <option value="card">Kartë</option>
+                      <option value="transfer">Transfertë</option>
+                    </select>
+                  </Field>
+                  <div className="flex items-end">
+                    <Button onClick={checkout} disabled={posLoading || cart.length === 0} className={`w-full ${primaryBtn}`}>
+                      {posLoading ? 'Duke përpunuar…' : `Paguaj ${eur(cartTotal)}`}
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </Panel>
+
           <Panel title="Mbyll arkën">
             <form onSubmit={close} className="flex flex-wrap items-end gap-4">
               <div className="w-48">
@@ -177,7 +397,7 @@ export default function AdminCashRegister() {
                     </td>
                     <td className="px-3 py-3 text-right">
                       {t.status === 'paid' && t.amount > 0 && (
-                        <Button size="sm" variant="outline" onClick={() => refund(t)}>Refund</Button>
+                        <Button size="sm" variant="outline" onClick={() => refund(t)}>Rimbursim</Button>
                       )}
                     </td>
                   </tr>

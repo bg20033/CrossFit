@@ -11,11 +11,13 @@ namespace StandUpFitness.Services;
 public class ClassReminderService : BackgroundService
 {
     private readonly IServiceScopeFactory _scopeFactory;
+    private readonly IGymTimeService _gymTime;
     private readonly ILogger<ClassReminderService> _logger;
 
-    public ClassReminderService(IServiceScopeFactory scopeFactory, ILogger<ClassReminderService> logger)
+    public ClassReminderService(IServiceScopeFactory scopeFactory, IGymTimeService gymTime, ILogger<ClassReminderService> logger)
     {
         _scopeFactory = scopeFactory;
+        _gymTime = gymTime;
         _logger = logger;
     }
 
@@ -51,13 +53,19 @@ public class ClassReminderService : BackgroundService
         var db = scope.ServiceProvider.GetRequiredService<FitnessContext>();
         var notifier = scope.ServiceProvider.GetRequiredService<INotificationService>();
 
-        var now = DateTime.UtcNow;
+        // Weekly slots are gym wall-clock times; matching them against UTC "now"
+        // shifted every group reminder by the UTC offset once deployed. Personal
+        // sessions keep UTC (their ScheduledDate is a stored UTC instant).
+        var now = _gymTime.LocalNow;
+        var utcNow = DateTime.UtcNow;
         var from = now.AddHours(2);
         var to = now.AddHours(3);
+        var utcFrom = utcNow.AddHours(2);
+        var utcTo = utcNow.AddHours(3);
 
         // Personal training sessions with a concrete date/time.
         var sessions = await db.PersonalSessions
-            .Where(s => s.Status == "scheduled" && s.ScheduledDate >= from && s.ScheduledDate < to)
+            .Where(s => s.Status == "scheduled" && s.ScheduledDate >= utcFrom && s.ScheduledDate < utcTo)
             .Select(s => new { s.ClientId, s.ScheduledDate })
             .ToListAsync(token);
 

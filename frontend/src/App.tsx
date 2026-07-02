@@ -1,6 +1,7 @@
 import { lazy, Suspense } from 'react'
 import { BrowserRouter, Routes, Route } from 'react-router-dom'
 import { AuthProvider } from './contexts/AuthContext'
+import { useAuth } from './contexts/AuthContext'
 import ProtectedRoute from './components/ProtectedRoute'
 import PublicLayout from './components/public/PublicLayout'
 import AppLayout from './components/app/AppLayout'
@@ -21,6 +22,8 @@ const AdminClients = lazy(() => import('./pages/AdminClients'))
 const AdminTrainers = lazy(() => import('./pages/AdminTrainers'))
 const AdminStaff = lazy(() => import('./pages/AdminStaff'))
 const AdminCashRegister = lazy(() => import('./pages/AdminCashRegister'))
+const AdminInventory = lazy(() => import('./pages/AdminInventory'))
+const AdminDiscounts = lazy(() => import('./pages/AdminDiscounts'))
 const AdminInvoices = lazy(() => import('./pages/AdminInvoices'))
 const AdminMembershipPlans = lazy(() => import('./pages/AdminMembershipPlans'))
 const AdminRentals = lazy(() => import('./pages/AdminRentals'))
@@ -39,6 +42,7 @@ const ClientDiet = lazy(() => import('./pages/ClientDiet'))
 const ClientGoals = lazy(() => import('./pages/ClientGoals'))
 const ClientProgress = lazy(() => import('./pages/ClientProgress'))
 const ClientCalendar = lazy(() => import('./pages/ClientCalendar'))
+const TenantClientCalendar = lazy(() => import('./pages/TenantClientCalendar'))
 const ClientOnboarding = lazy(() => import('./pages/ClientOnboarding'))
 const ClientNutrition = lazy(() => import('./pages/ClientNutrition'))
 const ArkaAccess = lazy(() => import('./pages/ArkaAccess'))
@@ -59,6 +63,11 @@ function PageFallback() {
       <div className="h-8 w-8 animate-spin rounded-full border-4 border-gray-200 border-t-gray-900" />
     </div>
   )
+}
+
+function CalendarSwitch() {
+  const { user } = useAuth()
+  return user?.role === 'tenant_client' ? <TenantClientCalendar /> : <ClientCalendar />
 }
 
 function App() {
@@ -87,25 +96,48 @@ function App() {
                 {/* Admin / GymOwner only */}
                 <Route element={<ProtectedRoute allowedRoles={['admin', 'gym_owner']} />}>
                   <Route path="/admin" element={<AdminDashboard />} />
-                  <Route path="/admin/finance" element={<AdminFinance />} />
-                  <Route path="/admin/trainers" element={<AdminTrainers />} />
-                  <Route path="/admin/staff" element={<AdminStaff />} />
                   <Route path="/admin/plans" element={<AdminMembershipPlans />} />
                   <Route path="/admin/payroll" element={<Payroll />} />
                   <Route path="/admin/trainer-payments" element={<AdminTrainerPayments />} />
                   <Route path="/admin/rentals" element={<AdminRentals />} />
                   <Route path="/admin/calendar" element={<AdminCalendar />} />
                   <Route path="/admin/groups" element={<AdminGroups />} />
+                  <Route path="/admin/inventory" element={<AdminInventory />} />
+                  <Route path="/admin/discounts" element={<AdminDiscounts />} />
                   <Route path="/admin/group-report/:groupId" element={<AdminGroupReport />} />
+                </Route>
+
+                <Route element={<ProtectedRoute allowedRoles={['admin', 'gym_owner']} allowedPermissions={['finance.read']} blockedRoles={['client', 'tenant_client', 'trainer_tenant']} />}>
+                  <Route path="/admin/finance" element={<AdminFinance />} />
+                </Route>
+
+                <Route element={<ProtectedRoute allowedRoles={['admin', 'gym_owner']} allowedPermissions={['trainers.write']} blockedRoles={['client', 'tenant_client', 'trainer_tenant']} />}>
+                  <Route path="/admin/trainers" element={<AdminTrainers />} />
+                </Route>
+
+                <Route element={<ProtectedRoute allowedRoles={['admin', 'gym_owner']} allowedPermissions={['staff.write']} blockedRoles={['client', 'tenant_client', 'trainer_tenant']} />}>
+                  <Route path="/admin/staff" element={<AdminStaff />} />
+                </Route>
+
+                <Route element={<ProtectedRoute allowedRoles={['admin', 'gym_owner']} allowedPermissions={['reports.read']} blockedRoles={['trainer', 'client', 'tenant_client', 'trainer_tenant']} />}>
                   <Route path="/admin/reports" element={<AdminReports />} />
+                </Route>
+
+                <Route element={<ProtectedRoute allowedRoles={['admin', 'gym_owner']} allowedPermissions={['roles.manage']} blockedRoles={['client', 'tenant_client', 'trainer_tenant']} />}>
                   <Route path="/admin/roles" element={<AdminRoles />} />
                 </Route>
 
                 {/* Front desk: Admin / GymOwner / Staff / Cashier (Arka) */}
-                <Route element={<ProtectedRoute allowedRoles={['admin', 'gym_owner', 'staff', 'cashier']} />}>
+                <Route element={<ProtectedRoute allowedRoles={['admin', 'gym_owner', 'staff', 'cashier']} allowedPermissions={['clients.write']} blockedRoles={['client', 'tenant_client', 'trainer_tenant']} />}>
                   <Route path="/admin/clients" element={<AdminClients />} />
+                </Route>
+
+                <Route element={<ProtectedRoute allowedRoles={['admin', 'gym_owner', 'staff', 'cashier']} allowedPermissions={['finance.write']} blockedRoles={['client', 'tenant_client', 'trainer_tenant']} />}>
                   <Route path="/admin/cash-register" element={<AdminCashRegister />} />
                   <Route path="/admin/invoices" element={<AdminInvoices />} />
+                </Route>
+
+                <Route element={<ProtectedRoute allowedRoles={['admin', 'gym_owner', 'staff', 'cashier']} allowedPermissions={['access.scan']} blockedRoles={['client', 'tenant_client', 'trainer_tenant']} />}>
                   <Route path="/arka/access" element={<ArkaAccess />} />
                 </Route>
 
@@ -126,16 +158,16 @@ function App() {
                   <Route path="/trainer/clients" element={<TrainerClients />} />
                 </Route>
 
-                {/* Client + Tenant-client shared screens */}
+                {/* Client + Tenant-client shared nutrition screens */}
                 <Route element={<ProtectedRoute allowedRoles={['client', 'tenant_client']} />}>
-                  <Route path="/workouts" element={<ClientWorkouts />} />
-                  <Route path="/calendar" element={<ClientCalendar />} />
+                  <Route path="/calendar" element={<CalendarSwitch />} />
                   <Route path="/nutrition" element={<ClientNutrition />} />
                   <Route path="/onboarding" element={<ClientOnboarding />} />
                 </Route>
 
                 {/* Client only */}
                 <Route element={<ProtectedRoute allowedRoles={['client']} />}>
+                  <Route path="/workouts" element={<ClientWorkouts />} />
                   <Route path="/diet" element={<ClientDiet />} />
                   <Route path="/goals" element={<ClientGoals />} />
                   <Route path="/progress" element={<ClientProgress />} />

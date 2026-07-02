@@ -44,6 +44,12 @@ public class InvoiceItem
     public int? GroupId { get; set; }
     public TrainingGroup? Group { get; set; }
 
+    // Optional link to inventory product for POS sales / stock tracking.
+    public int? ProductId { get; set; }
+    public Product? Product { get; set; }
+
+    public ICollection<StockMovement> StockMovements { get; set; } = new List<StockMovement>();
+
     // Navigation
     public Invoice Invoice { get; set; } = null!;
 }

@@ -1,3 +1,4 @@
+import { Apple, CalendarDays, Mail, Settings } from 'lucide-react'
 import { DashboardShell, DashboardHeader, Panel, QuickAction } from '../components/DashboardKit'
 import { useAuth } from '../contexts/AuthContext'
 
@@ -19,9 +20,9 @@ export default function TenantClientHome() {
       />
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        <QuickAction to="/calendar" icon="📅" label="Orari im" />
-        <QuickAction to="/workouts" icon="💪" label="Plani im i ushtrimeve" />
-        <QuickAction to="/nutrition" icon="🥗" label="Ushqimi & kaloritë" />
+        <QuickAction to="/calendar" icon={<CalendarDays className="h-5 w-5" />} label="Orari im" />
+        <QuickAction to="/nutrition" icon={<Apple className="h-5 w-5" />} label="Ushqimi & kaloritë" />
+        <QuickAction to="/messages" icon={<Mail className="h-5 w-5" />} label="Mesazhet" />
       </div>
 
       <Panel title="Të miat">
@@ -30,7 +31,7 @@ export default function TenantClientHome() {
           Orari dhe seancat e ardhshme i gjen te <span className="font-semibold">“Orari im”</span>.
         </p>
         <div className="mt-3">
-          <QuickAction to="/onboarding" icon="⚙️" label="Konfiguro kaloritë e tua" />
+          <QuickAction to="/onboarding" icon={<Settings className="h-5 w-5" />} label="Konfiguro kaloritë e tua" />
         </div>
       </Panel>
     </DashboardShell>

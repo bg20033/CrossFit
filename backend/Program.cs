@@ -77,12 +77,19 @@ builder.Services.AddSwaggerGen();
 builder.Services.AddProblemDetails();
 builder.Services.AddHealthChecks();
 builder.Services.AddHttpClient();
+builder.Services.AddMemoryCache();
 builder.Services.AddScoped<IEmailService, EmailService>();
 builder.Services.AddScoped<ISmsService, SmsService>();
 builder.Services.AddScoped<INotificationService, NotificationService>();
 builder.Services.AddHostedService<ClassReminderService>();
+builder.Services.AddHostedService<RentInvoiceService>();
+builder.Services.AddHostedService<MembershipExpiryService>();
 builder.Services.AddScoped<IPaymentGatewayService, PaymentGatewayService>();
 builder.Services.AddScoped<IClaimsTransformation, PermissionClaimsTransformation>();
+builder.Services.AddSingleton<IGymTimeService, GymTimeService>();
+builder.Services.AddScoped<IFinanceService, FinanceService>();
+builder.Services.AddScoped<IInvoicePaymentService, InvoicePaymentService>();
+builder.Services.AddScoped<IInventoryService, InventoryService>();
 
 // Database
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
@@ -155,16 +162,37 @@ builder.Services.AddAuthorization(options =>
         .Build();
 
     options.AddPolicy("AdminOnly", p => p.RequireAssertion(ctx =>
+        HasRole(ctx, "Admin", "GymOwner") || HasPermission(ctx, "system.admin")));
+    options.AddPolicy("RolesManage", p => p.RequireAssertion(ctx =>
         HasRole(ctx, "Admin", "GymOwner") || HasPermission(ctx, "system.admin", "roles.manage")));
     options.AddPolicy("AdminStaff", p => p.RequireAssertion(ctx =>
-        HasRole(ctx, "Admin", "GymOwner", "Staff") || HasPermission(ctx, "system.admin", "clients.write", "finance.write")));
+        HasRole(ctx, "Admin", "GymOwner", "Staff", "Cashier") || HasPermission(ctx, "system.admin", "clients.write")));
     options.AddPolicy("AdminTrainer", p => p.RequireAssertion(ctx =>
-        HasRole(ctx, "Admin", "GymOwner", "Trainer") || HasPermission(ctx, "system.admin", "schedule.write", "workouts.write", "nutrition.write", "reports.read")));
+        !HasRole(ctx, "TrainerTenant", "TenantClient") &&
+        (HasRole(ctx, "Admin", "GymOwner", "Trainer") || HasPermission(ctx, "system.admin", "schedule.write", "workouts.write", "nutrition.write", "reports.read"))));
+    options.AddPolicy("TrainerManage", p => p.RequireAssertion(ctx =>
+        !HasRole(ctx, "TrainerTenant", "TenantClient") &&
+        (HasRole(ctx, "Admin", "GymOwner") || HasPermission(ctx, "system.admin", "trainers.write"))));
+    options.AddPolicy("StaffManage", p => p.RequireAssertion(ctx =>
+        !HasRole(ctx, "TrainerTenant", "TenantClient") &&
+        (HasRole(ctx, "Admin", "GymOwner") || HasPermission(ctx, "system.admin", "staff.write"))));
+    options.AddPolicy("FinanceRead", p => p.RequireAssertion(ctx =>
+        !HasRole(ctx, "TrainerTenant", "TenantClient") &&
+        (HasRole(ctx, "Admin", "GymOwner") || HasPermission(ctx, "system.admin", "finance.read"))));
+    options.AddPolicy("FinanceWrite", p => p.RequireAssertion(ctx =>
+        !HasRole(ctx, "TrainerTenant", "TenantClient") &&
+        (HasRole(ctx, "Admin", "GymOwner") || HasPermission(ctx, "system.admin", "finance.write"))));
+    options.AddPolicy("ReportsRead", p => p.RequireAssertion(ctx =>
+        !HasRole(ctx, "Trainer", "TrainerTenant", "TenantClient", "Client") &&
+        (HasRole(ctx, "Admin", "GymOwner") || HasPermission(ctx, "system.admin", "reports.read"))));
     options.AddPolicy("AnyStaff", p => p.RequireAssertion(ctx =>
         HasRole(ctx, "Admin", "GymOwner", "Staff", "Trainer") || HasPermission(ctx, "system.admin", "clients.read")));
-    // Front desk / Arka: cashier + staff + admins operate POS and QR access.
+    // Front desk / Arka: cashier + staff + admins operate POS/payment flows.
     options.AddPolicy("Desk", p => p.RequireAssertion(ctx =>
-        HasRole(ctx, "Admin", "GymOwner", "Staff", "Cashier") || HasPermission(ctx, "system.admin", "access.scan", "finance.write")));
+        HasRole(ctx, "Admin", "GymOwner", "Staff", "Cashier") || HasPermission(ctx, "system.admin", "finance.write")));
+    // QR/access scanning can be delegated without granting payment/refund rights.
+    options.AddPolicy("AccessScan", p => p.RequireAssertion(ctx =>
+        HasRole(ctx, "Admin", "GymOwner", "Staff", "Cashier") || HasPermission(ctx, "system.admin", "access.scan")));
     // Rental tenant trainers — isolated micro-gym space.
     options.AddPolicy("TenantOnly", p => p.RequireAssertion(ctx =>
         HasRole(ctx, "TrainerTenant") || HasPermission(ctx, "rental.manage")));

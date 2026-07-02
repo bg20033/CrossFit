@@ -1,17 +1,21 @@
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
 using Microsoft.EntityFrameworkCore.Migrations;
+using StandUpFitness.Data;
 
 #nullable disable
 
 namespace StandUpFitness.Migrations
 {
     // Hand-authored migration (no `dotnet ef` tooling available in the environment
-    // this was written in). It carries its own [Migration] attribute instead of a
-    // separate *.Designer.cs, which is all EF Core needs to discover and apply it
-    // via `dotnet ef database update` / Database.Migrate(). Before your next
-    // `dotnet ef migrations add`, run one locally to confirm the model is in sync —
-    // FitnessContextModelSnapshot.cs was updated by hand alongside this file.
+    // this was written in). NOTE: EF Core discovers migrations by BOTH attributes —
+    // [Migration] for the id AND [DbContext] to match the context (normally supplied
+    // by the generated *.Designer.cs). Without [DbContext] the migration is silently
+    // skipped by Database.Migrate(), which left RentalScheduleSlots/RentalSessions
+    // uncreated. Before your next `dotnet ef migrations add`, run one locally to
+    // confirm the model is in sync — FitnessContextModelSnapshot.cs was updated by
+    // hand alongside this file.
+    [DbContext(typeof(FitnessContext))]
     [Migration("20260701120000_ReworkRentalScheduling")]
     public partial class ReworkRentalScheduling : Migration
     {
@@ -21,7 +25,16 @@ namespace StandUpFitness.Migrations
             // Rentals no longer work as "book a slot out of a shared pool" (RentalSlots).
             // A qiragji (TrainerTenant) now configures their own name + recurring weekly
             // schedule directly, the same way a TrainingGroup does.
-            migrationBuilder.DropTable(name: "RentalSlots");
+            //
+            // NOTE — re-runnable on purpose: MySQL DDL is NOT transactional, so a failure
+            // partway through Up() leaves the schema half-migrated with no history row,
+            // and every subsequent startup retries Up() from the top and dies on the first
+            // already-done step. IF EXISTS drops make any partial state recoverable. The
+            // two new tables carried no data before this migration ever succeeded, so
+            // dropping leftovers is safe.
+            migrationBuilder.Sql("DROP TABLE IF EXISTS `RentalSlots`;");
+            migrationBuilder.Sql("DROP TABLE IF EXISTS `RentalScheduleSlots`;");
+            migrationBuilder.Sql("DROP TABLE IF EXISTS `RentalSessions`;");
 
             migrationBuilder.CreateTable(
                 name: "RentalScheduleSlots",
@@ -98,8 +111,9 @@ namespace StandUpFitness.Migrations
         /// <inheritdoc />
         protected override void Down(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.DropTable(name: "RentalSessions");
-            migrationBuilder.DropTable(name: "RentalScheduleSlots");
+            migrationBuilder.Sql("DROP TABLE IF EXISTS `RentalSessions`;");
+            migrationBuilder.Sql("DROP TABLE IF EXISTS `RentalScheduleSlots`;");
+            migrationBuilder.Sql("DROP TABLE IF EXISTS `RentalSlots`;");
 
             migrationBuilder.CreateTable(
                 name: "RentalSlots",

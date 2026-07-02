@@ -16,17 +16,18 @@ public class PaymentsController : ControllerBase
 {
     private readonly FitnessContext _context;
     private readonly IPaymentGatewayService _gateway;
+    private readonly IInvoicePaymentService _invoicePayments;
+    private readonly IFinanceService _finance;
+    private readonly IInventoryService _inventory;
 
-    public PaymentsController(FitnessContext context, IPaymentGatewayService gateway)
+    public PaymentsController(FitnessContext context, IPaymentGatewayService gateway,
+        IInvoicePaymentService invoicePayments, IFinanceService finance, IInventoryService inventory)
     {
         _context = context;
         _gateway = gateway;
-    }
-
-    private int? CurrentUserId()
-    {
-        var claim = User.FindFirst(ClaimTypes.NameIdentifier);
-        return int.TryParse(claim?.Value, out var id) ? id : null;
+        _invoicePayments = invoicePayments;
+        _finance = finance;
+        _inventory = inventory;
     }
 
     [HttpPost("checkout")]
@@ -49,8 +50,10 @@ public class PaymentsController : ControllerBase
 
         var amount = request.Amount ?? invoice?.TotalAmount;
         if (amount == null || amount <= 0) return BadRequest("Amount is required");
+        if (invoice != null && invoice.Status is "cancelled" or "refunded")
+            return BadRequest(new { message = $"Fatura është {invoice.Status} dhe nuk mund të paguhet." });
 
-        var receiptNumber = $"RC-{DateTime.UtcNow:yyyyMMdd}-{Random.Shared.Next(1000, 9999)}";
+        var receiptNumber = DocumentNumbers.Receipt();
         var gateway = await _gateway.CreateAsync(request.Method, amount.Value, "EUR", receiptNumber);
         if (gateway.Status == "unconfigured")
             return BadRequest(new { message = "Pagesat online nuk janë konfiguruar. Përdor cash, card ose transfer, ose vendos Payments:Provider." });
@@ -59,7 +62,7 @@ public class PaymentsController : ControllerBase
         {
             InvoiceId = invoice?.Id,
             ClientId = request.ClientId ?? invoice?.ClientId,
-            StaffId = CurrentUserId(),
+            StaffId = User.CurrentUserId(),
             Amount = amount.Value,
             Currency = "EUR",
             Method = request.Method,
@@ -73,16 +76,32 @@ public class PaymentsController : ControllerBase
 
         _context.PaymentTransactions.Add(tx);
 
-        if (tx.Status == "paid" && invoice != null)
-        {
-            invoice.Status = "paid";
-            invoice.PaidDate = DateTime.UtcNow;
-            invoice.PaymentMethod = tx.Method;
-            invoice.UpdatedAt = DateTime.UtcNow;
-        }
+        if (tx.Status == "paid")
+            await ApplyPaidEffectsAsync(tx, invoice);
 
         await _context.SaveChangesAsync();
         return Ok(Shape(tx, gateway.CheckoutUrl));
+    }
+
+    // Books the money for a settled transaction. With an invoice this runs the
+    // full pipeline (finance income + membership activation + group auto-enroll);
+    // without one (ad-hoc desk sale) it still records the income — previously
+    // these payments never reached Finance at all, so reports understated revenue.
+    private async Task ApplyPaidEffectsAsync(PaymentTransaction tx, Invoice? invoice)
+    {
+        if (invoice != null)
+        {
+            await _invoicePayments.MarkPaidAsync(invoice, tx.Method, User.CurrentUserId());
+        }
+        else
+        {
+            await _finance.RecordIncomeAsync(
+                FinanceService.MemberPayments,
+                tx.Amount,
+                $"Pagesë në arkë — kuponi {tx.ReceiptNumber}",
+                tx.Method,
+                User.CurrentUserId());
+        }
     }
 
     [HttpPost("{id:int}/confirm")]
@@ -96,13 +115,8 @@ public class PaymentsController : ControllerBase
         tx.ProviderReference = request.ProviderReference ?? tx.ProviderReference;
         tx.UpdatedAt = DateTime.UtcNow;
 
-        if (request.Success && tx.Invoice != null)
-        {
-            tx.Invoice.Status = "paid";
-            tx.Invoice.PaidDate = DateTime.UtcNow;
-            tx.Invoice.PaymentMethod = tx.Method;
-            tx.Invoice.UpdatedAt = DateTime.UtcNow;
-        }
+        if (request.Success)
+            await ApplyPaidEffectsAsync(tx, tx.Invoice);
 
         await _context.SaveChangesAsync();
         return Ok(Shape(tx));
@@ -129,16 +143,24 @@ public class PaymentsController : ControllerBase
         {
             InvoiceId = tx.InvoiceId,
             ClientId = tx.ClientId,
-            StaffId = CurrentUserId(),
+            StaffId = User.CurrentUserId(),
             Amount = -amount,
             Currency = tx.Currency,
             Method = tx.Method,
             Status = "refunded",
             Provider = tx.Provider,
             ProviderReference = tx.ProviderReference,
-            ReceiptNumber = $"RF-{DateTime.UtcNow:yyyyMMdd}-{Random.Shared.Next(1000, 9999)}"
+            ReceiptNumber = DocumentNumbers.Refund()
         };
         _context.PaymentTransactions.Add(refund);
+
+        // Refunds must show up in Finance too — otherwise reports overstate income.
+        await _finance.RecordExpenseAsync(
+            FinanceService.Refunds,
+            amount,
+            $"Rimbursim — kuponi {tx.ReceiptNumber ?? tx.Id.ToString()}{(string.IsNullOrWhiteSpace(request.Reason) ? "" : $" ({request.Reason})")}",
+            tx.Method,
+            User.CurrentUserId());
 
         var fullRefund = amount >= tx.Amount;
         if (fullRefund) tx.Status = "refunded";
@@ -203,9 +225,119 @@ public class PaymentsController : ControllerBase
         receiptUrl = $"/api/payments/{tx.Id}/receipt"
     };
 
+    // POST: api/payments/pos-checkout
+    // Cash-register product sale: creates a paid invoice, books the income,
+    // records the payment transaction, and decrements stock atomically.
+    [HttpPost("pos-checkout")]
+    public async Task<IActionResult> PosCheckout([FromBody] PosCheckoutRequest request)
+    {
+        if (!string.IsNullOrWhiteSpace(request.IdempotencyKey))
+        {
+            var existing = await _context.PaymentTransactions
+                .FirstOrDefaultAsync(p => p.IdempotencyKey == request.IdempotencyKey);
+            if (existing != null) return Ok(Shape(existing));
+        }
+
+        if (request.Items == null || request.Items.Count == 0)
+            return BadRequest(new { message = "Cart is empty" });
+
+        var clientExists = await _context.Clients.AnyAsync(c => c.Id == request.ClientId);
+        if (!clientExists) return BadRequest(new { message = "Client not found" });
+
+        var productIds = request.Items.Select(i => i.ProductId).Distinct().ToList();
+        var products = await _context.Products
+            .Where(p => productIds.Contains(p.Id))
+            .ToDictionaryAsync(p => p.Id);
+
+        var invoice = new Invoice
+        {
+            InvoiceNumber = DocumentNumbers.Invoice(),
+            ClientId = request.ClientId,
+            StaffId = User.CurrentUserId(),
+            Description = "Shitje në arkë",
+            PaymentMethod = request.Method,
+            Status = "pending",
+            DueDate = DateTime.UtcNow,
+            CashRegisterId = IsCashLike(request.Method) ? await _finance.FindOpenCashRegisterIdAsync() : null
+        };
+
+        foreach (var item in request.Items)
+        {
+            if (!products.TryGetValue(item.ProductId, out var product))
+                return BadRequest(new { message = $"Product {item.ProductId} not found" });
+            if (item.Quantity <= 0)
+                return BadRequest(new { message = $"Invalid quantity for {product.Name}" });
+
+            invoice.Items.Add(new InvoiceItem
+            {
+                Description = product.Name,
+                Quantity = item.Quantity,
+                UnitPrice = product.SalePrice,
+                Total = item.Quantity * product.SalePrice,
+                ProductId = product.Id
+            });
+        }
+
+        invoice.Subtotal = invoice.Items.Sum(i => i.Total);
+        invoice.TaxAmount = 0;
+        invoice.TotalAmount = invoice.Subtotal;
+
+        _context.Invoices.Add(invoice);
+
+        var receiptNumber = DocumentNumbers.Receipt();
+        var tx = new PaymentTransaction
+        {
+            Invoice = invoice,
+            ClientId = request.ClientId,
+            StaffId = User.CurrentUserId(),
+            Amount = invoice.TotalAmount,
+            Currency = "EUR",
+            Method = request.Method,
+            Status = "paid",
+            Provider = "manual",
+            ReceiptNumber = receiptNumber,
+            IdempotencyKey = request.IdempotencyKey
+        };
+        tx.ReceiptHtml = BuildReceiptHtml(tx, invoice);
+        _context.PaymentTransactions.Add(tx);
+
+        var (applied, error) = await _invoicePayments.MarkPaidAsync(invoice, request.Method, User.CurrentUserId());
+        if (error != null) return BadRequest(new { message = error });
+
+        try
+        {
+            await _inventory.RemoveStockForSaleAsync(invoice.Items, User.CurrentUserId());
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+
+        await _context.SaveChangesAsync();
+
+        return Ok(Shape(tx));
+    }
+
+    private static bool IsCashLike(string method) =>
+        string.Equals(method, "cash", StringComparison.OrdinalIgnoreCase) ||
+        string.Equals(method, "pos", StringComparison.OrdinalIgnoreCase);
+
     private static string BuildReceiptHtml(PaymentTransaction tx, Invoice? invoice)
     {
-        var client = invoice?.Client?.User?.Name ?? "Klient";
+        var client = invoice?.Client?.User?.Name ?? (invoice?.ClientId > 0 ? $"Klient #{invoice.ClientId}" : "Klient");
+        var itemsHtml = "";
+        if (invoice?.Items is { Count: > 0 } items)
+        {
+            var rows = string.Join("\n", items.Select(i =>
+                $"<tr><td>{i.Description}</td><td style='text-align:center'>{i.Quantity}</td><td style='text-align:right'>{i.UnitPrice:0.00}</td><td style='text-align:right'>{i.Total:0.00}</td></tr>"));
+            itemsHtml = $"""
+            <table style="width:100%;border-collapse:collapse;margin:16px 0;font-size:14px">
+              <thead><tr style="border-bottom:1px solid #ddd"><th style="text-align:left">Artikulli</th><th>Sasia</th><th style="text-align:right">Çmimi</th><th style="text-align:right">Totali</th></tr></thead>
+              <tbody>{rows}</tbody>
+            </table>
+            """;
+        }
+
         return $"""
         <!doctype html>
         <html lang="sq">
@@ -217,12 +349,27 @@ public class PaymentsController : ControllerBase
           <p><strong>Klienti:</strong> {client}</p>
           <p><strong>Metoda:</strong> {tx.Method}</p>
           <p><strong>Statusi:</strong> {tx.Status}</p>
-          <p><strong>Totali:</strong> {tx.Amount:0.00} {tx.Currency}</p>
+          {itemsHtml}
+          <p style="font-size:18px;font-weight:bold;margin-top:16px">Totali: {tx.Amount:0.00} {tx.Currency}</p>
           <p><strong>Data:</strong> {tx.CreatedAt:dd.MM.yyyy HH:mm}</p>
         </body>
         </html>
         """;
     }
+}
+
+public class PosCheckoutRequest
+{
+    [Required] public int ClientId { get; set; }
+    [Required, MaxLength(30)] public string Method { get; set; } = "cash";
+    public List<PosCheckoutItem> Items { get; set; } = new();
+    [MaxLength(120)] public string? IdempotencyKey { get; set; }
+}
+
+public class PosCheckoutItem
+{
+    public int ProductId { get; set; }
+    [Range(1, int.MaxValue)] public int Quantity { get; set; }
 }
 
 public class CheckoutRequest

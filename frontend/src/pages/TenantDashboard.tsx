@@ -3,7 +3,6 @@ import { Link } from 'react-router-dom'
 import { useEffect, useMemo, useState } from 'react'
 import { DashboardHeader, DashboardShell, EmptyState, Panel, QuickAction, StatCard } from '../components/DashboardKit'
 import { fmtMin } from '../features/access/accessEngine'
-import { useAuth } from '../contexts/AuthContext'
 import api from '../utils/api'
 
 interface TenantClientRow {
@@ -26,7 +25,6 @@ interface RentalInvoice {
 const AVG_REVENUE_PER_CLIENT = 120
 
 export default function TenantDashboard() {
-  const { profileId } = useAuth()
   const [clients, setClients] = useState<TenantClientRow[]>([])
   const [slots, setSlots] = useState<ScheduleSlot[]>([])
   const [invoices, setInvoices] = useState<RentalInvoice[]>([])
@@ -34,9 +32,9 @@ export default function TenantDashboard() {
 
   useEffect(() => {
     Promise.all([
-      api.get(`/rentals/tenant/clients?tenantId=${profileId}`),
+      api.get('/rentals/tenant/clients'),
       api.get('/rentals/tenant/schedule'),
-      api.get(`/rentals/tenant/invoices?tenantId=${profileId}`),
+      api.get('/rentals/tenant/invoices'),
     ])
       .then(([clientsRes, scheduleRes, invoicesRes]) => {
         setClients(Array.isArray(clientsRes.data) ? clientsRes.data : [])

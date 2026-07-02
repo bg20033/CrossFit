@@ -61,6 +61,19 @@ export default {
         accentink: "#B03A26",
         success: "#1F9D55",
 
+        // Public marketing site palette (Landing / PublicLayout only).
+        // Warm cream + clay/terracotta + olive, per the marketing design ref.
+        cream: "#F4EFE6",          // page background
+        sand: "#EAE2D4",           // alt section background
+        paper: "#FCFAF5",          // card background
+        cocoa: "#241F18",          // dark ink / footer / pricing bg
+        clay: {
+          DEFAULT: "#B0603A",      // primary accent (terracotta)
+          light: "#E9A57E",        // headline accent on dark
+          mid: "#D08A63",          // eyebrow on dark
+        },
+        olive: "#6B6E44",          // secondary accent (tags, success line)
+
         // shadcn CSS-var bindings (kept; values rewired in index.css).
         border: "hsl(var(--border))",
         input: "hsl(var(--input))",
@@ -100,6 +113,8 @@ export default {
         sans: ['"Hanken Grotesk"', 'system-ui', 'sans-serif'],
         display: ['"Space Grotesk"', '"Hanken Grotesk"', 'sans-serif'],
         mono: ['"Space Mono"', 'ui-monospace', 'monospace'],
+        // Marketing display serif (public pages).
+        newsreader: ['"Newsreader"', 'Georgia', 'serif'],
       },
       letterSpacing: {
         tightest: '-0.03em',

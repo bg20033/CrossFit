@@ -2,6 +2,7 @@ import { Banknote, Calculator, CheckCircle2, Users, Wallet } from 'lucide-react'
 import { useState, useEffect, useCallback } from 'react'
 import { Button } from '../components/ui/button'
 import { useNotification } from '../contexts/NotificationContext'
+import FinanceTabs from '../components/app/FinanceTabs'
 import api from '../utils/api'
 import { eur } from '../utils/format'
 import { toDecimal } from '../utils/number'
@@ -151,6 +152,8 @@ export default function AdminTrainerPayments() {
           </Button>
         }
       />
+
+      <FinanceTabs />
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         <StatCard icon={<Users className="h-5 w-5" />} label="Trajnerë" value={loading ? '…' : trainers.length} />

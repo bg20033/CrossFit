@@ -1,4 +1,4 @@
-import { NavLink, Link, useNavigate } from 'react-router-dom'
+import { NavLink, Link, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../../contexts/AuthContext'
 import { roleLabel } from '../../lib/roles'
 import { navForRole, LogOut } from './navItems'
@@ -17,7 +17,8 @@ function initials(name?: string): string {
 function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
   const { user, logout } = useAuth()
   const navigate = useNavigate()
-  const items = navForRole(user?.role)
+  const { pathname } = useLocation()
+  const items = navForRole(user?.role, user?.permissions)
 
   const handleLogout = () => {
     logout()
@@ -40,6 +41,8 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
       <nav className="flex-1 space-y-1 px-3">
         {items.map((item) => {
           const Icon = item.icon
+          // p.sh. "Financat" mbetet aktive edhe në tabs e seksionit (faturat, rrogat, pagesat e trajnerëve)
+          const matchesSection = item.match?.some((p) => pathname === p || pathname.startsWith(`${p}/`)) ?? false
           return (
             <NavLink
               key={item.to}
@@ -48,7 +51,7 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
               end={item.to === '/dashboard'}
               className={({ isActive }) =>
                 `flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition ${
-                  isActive
+                  isActive || matchesSection
                     ? 'bg-coral-500 text-white'
                     : 'text-gray-600 hover:bg-coral-50 hover:text-coral-700'
                 }`
@@ -93,7 +96,7 @@ export default function Sidebar({ open, onClose }: { open: boolean; onClose: () 
       </aside>
 
       {/* Mobile slide-over */}
-      <div className={`fixed inset-0 z-40 md:hidden ${open ? '' : 'pointer-events-none'}`}>
+      <div className={`fixed inset-0 z-40 overflow-hidden md:hidden ${open ? '' : 'pointer-events-none'}`}>
         <div
           onClick={onClose}
           className={`absolute inset-0 bg-black/40 transition-opacity ${open ? 'opacity-100' : 'opacity-0'}`}

@@ -2,6 +2,7 @@ import { Banknote, CheckCircle, Clock, Receipt } from 'lucide-react'
 import { useState, useEffect } from 'react'
 import { Button } from '../components/ui/button'
 import { useNotification } from '../contexts/NotificationContext'
+import FinanceTabs from '../components/app/FinanceTabs'
 import api from '../utils/api'
 import { toDecimal } from '../utils/number'
 import { eur } from '../utils/format'
@@ -70,7 +71,7 @@ export default function AdminInvoices() {
   useEffect(() => {
     if (form.clientId && showCreate) {
       setSuggestLoading(true)
-      api.get(`/traininggroups/suggest-for-client?clientId=${form.clientId}`)
+      api.get(`/invoice/suggest-for-client?clientId=${form.clientId}`)
         .then((r) => setGroups(Array.isArray(r.data) ? r.data : []))
         .catch(() => setGroups([]))
         .finally(() => setSuggestLoading(false))
@@ -114,7 +115,7 @@ export default function AdminInvoices() {
     e.preventDefault()
     try {
       await api.post('/invoice/create', {
-        clientId: parseInt(form.clientId),
+        clientId: parseInt(form.clientId, 10),
         description: form.description,
         taxPercent: toDecimal(form.taxPercent || '0'),
         paymentMethod: form.paymentMethod,
@@ -150,6 +151,8 @@ export default function AdminInvoices() {
           <Button onClick={() => setShowCreate(true)} className={primaryBtn}>+ Faturë e re</Button>
         }
       />
+
+      <FinanceTabs />
 
       {error && <div className="rounded-lg border border-gray-300 bg-gray-100 px-4 py-2.5 text-sm text-gray-800">{error}</div>}
 

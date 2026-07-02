@@ -2,9 +2,9 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using System.ComponentModel.DataAnnotations;
-using System.Security.Claims;
 using StandUpFitness.Data;
 using StandUpFitness.Models;
+using StandUpFitness.Services;
 
 namespace StandUpFitness.Controllers;
 
@@ -14,21 +14,17 @@ namespace StandUpFitness.Controllers;
 public class RentalsController : ControllerBase
 {
     private readonly FitnessContext _context;
+    private readonly IFinanceService _finance;
 
-    public RentalsController(FitnessContext context)
+    public RentalsController(FitnessContext context, IFinanceService finance)
     {
         _context = context;
-    }
-
-    private int? CurrentUserId()
-    {
-        var claim = User.FindFirst(ClaimTypes.NameIdentifier);
-        return int.TryParse(claim?.Value, out var id) ? id : null;
+        _finance = finance;
     }
 
     private async Task<TrainerTenant?> CurrentTenantAsync()
     {
-        var userId = CurrentUserId();
+        var userId = User.CurrentUserId();
         if (userId == null) return null;
         return await _context.TrainerTenants.FirstOrDefaultAsync(t => t.UserId == userId);
     }
@@ -80,21 +76,86 @@ public class RentalsController : ControllerBase
         return Ok(new { message = "Updated" });
     }
 
+    // POST: api/rentals/{id}/convert — kërkesa publike bëhet qiragji me një hap.
+    // Gjen (ose krijon) userin me email-in e kërkesës, e kthen në TrainerTenant me
+    // orarin javor + qiranë mujore, dhe e shënon kërkesën "converted" — që kërkesat
+    // të mos mbeten listë e vdekur por të lidhen me pjesën tjetër të sistemit.
+    [Authorize(Policy = "AdminOnly")]
+    [HttpPost("{id:int}/convert")]
+    public async Task<IActionResult> ConvertInquiry(int id, [FromBody] ConvertInquiryRequest request)
+    {
+        var inquiry = await _context.RentalInquiries.FindAsync(id);
+        if (inquiry == null) return NotFound();
+        if (inquiry.Status == "converted")
+            return BadRequest(new { message = "Kjo kërkesë është konvertuar tashmë në qiragji." });
+
+        var (slots, error) = BuildRentalSlots(request.Slots);
+        if (error != null) return BadRequest(new { message = error });
+
+        var email = inquiry.Email.Trim().ToLowerInvariant();
+        var user = await _context.Users.FirstOrDefaultAsync(u => u.Email == email);
+        if (user == null)
+        {
+            // Person i jashtëm — krijohet llogaria e re me rolin Qiragji.
+            if (string.IsNullOrWhiteSpace(request.Password) || request.Password.Length < 8)
+                return BadRequest(new { message = "Fjalëkalimi i përkohshëm duhet të ketë së paku 8 karaktere (llogaria e re krijohet me email-in e kërkesës)." });
+
+            user = new User
+            {
+                Email = email,
+                Name = inquiry.Name.Trim(),
+                Phone = string.IsNullOrWhiteSpace(inquiry.Phone) ? null : inquiry.Phone.Trim(),
+                PasswordHash = BCrypt.Net.BCrypt.HashPassword(request.Password),
+                Role = UserRole.TrainerTenant
+            };
+            _context.Users.Add(user);
+        }
+        else
+        {
+            // Ekziston llogari me këtë email — vlejnë rregullat e CreateTenant.
+            if (await _context.TrainerTenants.AnyAsync(t => t.UserId == user.Id))
+                return BadRequest(new { message = "Përdoruesi me këtë email është tashmë qiragji." });
+            if (user.Role != UserRole.Trainer && user.Role != UserRole.TrainerTenant)
+                return BadRequest(new { message = $"Ekziston një llogari ({email}) që s'është trajner — qiragji bëhet vetëm një trajner ekzistues ose një llogari e re." });
+            user.Role = UserRole.TrainerTenant;
+        }
+
+        var tenant = new TrainerTenant
+        {
+            User = user,
+            BusinessName = string.IsNullOrWhiteSpace(request.BusinessName) ? inquiry.Name.Trim() : request.BusinessName.Trim(),
+            ContractStatus = "active",
+            ContractStart = DateTime.UtcNow,
+            MonthlyRate = request.MonthlyRate,
+            ScheduleSlots = slots
+        };
+        _context.TrainerTenants.Add(tenant);
+
+        inquiry.Status = "converted";
+        await _context.SaveChangesAsync();
+
+        return Ok(new { message = "Kërkesa u konvertua në qiragji", tenantId = tenant.Id });
+    }
+
     // GET: api/rentals/tenants — admin sees qiragjinjtë (tenants), their schedule and occupancy.
     [Authorize(Policy = "AdminOnly")]
     [HttpGet("tenants")]
     public async Task<IActionResult> GetTenants()
     {
-        var tenants = await _context.TrainerTenants
+        var tenantRows = await _context.TrainerTenants
             .Include(t => t.User)
             .Include(t => t.ScheduleSlots)
             .Include(t => t.Invoices)
+            .AsNoTracking()
+            .AsSplitQuery()
             .OrderByDescending(t => t.CreatedAt)
-            .Select(t => new
+            .ToListAsync();
+
+        var tenants = tenantRows.Select(t => new
             {
                 t.Id,
                 t.UserId,
-                Trainer = t.User.Name,
+                Trainer = t.User?.Name ?? t.BusinessName,
                 t.BusinessName,
                 t.ContractStatus,
                 t.ContractStart,
@@ -102,10 +163,11 @@ public class RentalsController : ControllerBase
                 t.MonthlyRate,
                 Slots = t.ScheduleSlots
                     .OrderBy(s => s.StartMin)
-                    .Select(s => new { s.DayOfWeek, s.StartMin, s.EndMin }),
+                    .Select(s => new { s.DayOfWeek, s.StartMin, s.EndMin })
+                    .ToList(),
                 BalanceDue = t.Invoices.Where(i => i.Status != "paid").Sum(i => i.Amount)
             })
-            .ToListAsync();
+            .ToList();
 
         return Ok(tenants);
     }
@@ -120,6 +182,10 @@ public class RentalsController : ControllerBase
     {
         var user = await _context.Users.FindAsync(request.UserId);
         if (user == null) return BadRequest(new { message = "User not found" });
+        if (user.Role != UserRole.Trainer && user.Role != UserRole.TrainerTenant)
+            return BadRequest(new { message = "Qiragji mund të krijohet vetëm nga një trajner ekzistues." });
+        if (await _context.TrainerTenants.AnyAsync(t => t.UserId == user.Id))
+            return BadRequest(new { message = "Ky trajner është tashmë qiragji." });
 
         var (slots, error) = BuildRentalSlots(request.Slots);
         if (error != null) return BadRequest(new { message = error });
@@ -132,7 +198,7 @@ public class RentalsController : ControllerBase
             ContractStatus = request.ContractStatus ?? "active",
             ContractStart = request.ContractStart ?? DateTime.UtcNow,
             ContractEnd = request.ContractEnd,
-            MonthlyRate = request.MonthlyRate,
+            MonthlyRate = request.MonthlyRate ?? 0,
             ScheduleSlots = slots
         };
 
@@ -153,7 +219,7 @@ public class RentalsController : ControllerBase
         if (request.ContractStatus != null) tenant.ContractStatus = request.ContractStatus;
         if (request.ContractStart.HasValue) tenant.ContractStart = request.ContractStart.Value;
         tenant.ContractEnd = request.ContractEnd ?? tenant.ContractEnd;
-        if (request.MonthlyRate > 0) tenant.MonthlyRate = request.MonthlyRate;
+        if (request.MonthlyRate.HasValue) tenant.MonthlyRate = request.MonthlyRate.Value;
 
         if (request.Slots != null && request.Slots.Count > 0)
         {
@@ -303,11 +369,70 @@ public class RentalsController : ControllerBase
         if (invoice == null) return NotFound();
         if (invoice.Status == "paid") return Ok(new { message = "Already paid" });
 
-        invoice.Status = "paid";
-        invoice.PaidAt = DateTime.UtcNow;
+        await SettleRentalInvoiceAsync(invoice, tenant.BusinessName, "cash");
         await _context.SaveChangesAsync();
         return Ok(new { message = "Invoice paid" });
     }
+
+    // GET: api/rentals/tenants/{id}/invoices — admin sees a tenant's rent invoices.
+    [Authorize(Policy = "AdminOnly")]
+    [HttpGet("tenants/{id:int}/invoices")]
+    public async Task<IActionResult> GetTenantInvoicesAdmin(int id)
+    {
+        if (!await _context.TrainerTenants.AnyAsync(t => t.Id == id)) return NotFound();
+        var invoices = await _context.RentalInvoices
+            .Where(i => i.TrainerTenantId == id)
+            .OrderByDescending(i => i.PeriodStart)
+            .Select(i => new { i.Id, i.InvoiceNumber, i.Amount, i.PeriodStart, i.PeriodEnd, i.DueDate, i.Status, i.PaidAt })
+            .ToListAsync();
+        return Ok(invoices);
+    }
+
+    // POST: api/rentals/invoices/{id}/pay — admin/desk collects the rent
+    // (cash/card/bank); income lands in Finance like every other payment.
+    [Authorize(Policy = "AdminOnly")]
+    [HttpPost("invoices/{id:int}/pay")]
+    public async Task<IActionResult> PayRentalInvoiceAdmin(int id, [FromBody] RentPaymentRequest? request)
+    {
+        var invoice = await _context.RentalInvoices
+            .Include(i => i.TrainerTenant)
+            .FirstOrDefaultAsync(i => i.Id == id);
+        if (invoice == null) return NotFound();
+        if (invoice.Status == "paid") return BadRequest(new { message = "Fatura është e paguar tashmë." });
+        if (invoice.Status == "void") return BadRequest(new { message = "Fatura është anuluar." });
+
+        var method = request?.PaymentMethod?.ToLowerInvariant() switch
+        {
+            "card" => "card",
+            "bank" => "bank",
+            _ => "cash",
+        };
+        await SettleRentalInvoiceAsync(invoice, invoice.TrainerTenant.BusinessName, method);
+        await _context.SaveChangesAsync();
+        return Ok(new { message = "Qiraja u arkëtua" });
+    }
+
+    // Shared settle: mark paid + book rent as Finance income (previously rental
+    // payments never reached the books, so finance understated revenue).
+    // Does not SaveChanges — the caller commits.
+    private async Task SettleRentalInvoiceAsync(RentalInvoice invoice, string businessName, string paymentMethod)
+    {
+        invoice.Status = "paid";
+        invoice.PaidAt = DateTime.UtcNow;
+        invoice.UpdatedAt = DateTime.UtcNow;
+
+        await _finance.RecordIncomeAsync(
+            FinanceService.Rental,
+            invoice.Amount,
+            $"Qira — {businessName} ({invoice.InvoiceNumber})",
+            paymentMethod,
+            User.CurrentUserId());
+    }
+}
+
+public class RentPaymentRequest
+{
+    public string? PaymentMethod { get; set; } // cash | card | bank
 }
 
 public class RentalInquiryRequest
@@ -323,6 +448,16 @@ public class RentalStatusRequest
     public string Status { get; set; } = null!;
 }
 
+// Konvertimi i një kërkese publike në qiragji. Password kërkohet vetëm kur
+// s'ekziston llogari me email-in e kërkesës (krijohet e re me rolin Qiragji).
+public class ConvertInquiryRequest
+{
+    [MaxLength(120)] public string? BusinessName { get; set; }
+    [Range(0, 1_000_000)] public decimal MonthlyRate { get; set; }
+    [MaxLength(100)] public string? Password { get; set; }
+    public List<RentalSlotDto>? Slots { get; set; }
+}
+
 public class TenantRequest
 {
     public int UserId { get; set; }
@@ -330,7 +465,8 @@ public class TenantRequest
     public string? ContractStatus { get; set; }
     public DateTime? ContractStart { get; set; }
     public DateTime? ContractEnd { get; set; }
-    [Range(0, 1_000_000)] public decimal MonthlyRate { get; set; }
+    // Nullable që update-i të dallojë "s'u dërgua" nga "0" (qira falas lejohet).
+    [Range(0, 1_000_000)] public decimal? MonthlyRate { get; set; }
     public List<RentalSlotDto>? Slots { get; set; }
 }
 

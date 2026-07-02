@@ -2,7 +2,6 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using System.ComponentModel.DataAnnotations;
-using System.Security.Claims;
 using StandUpFitness.Data;
 using StandUpFitness.Models;
 using StandUpFitness.Services;
@@ -21,17 +20,11 @@ public class NutritionController : ControllerBase
         _context = context;
     }
 
-    private int? CurrentUserId()
-    {
-        var claim = User.FindFirst(ClaimTypes.NameIdentifier);
-        return int.TryParse(claim?.Value, out var id) ? id : null;
-    }
-
     // GET /api/nutrition/me — the saved profile + targets (204 if none yet).
     [HttpGet("me")]
     public async Task<IActionResult> GetMine()
     {
-        var userId = CurrentUserId();
+        var userId = User.CurrentUserId();
         if (userId == null) return Unauthorized();
 
         var p = await _context.NutritionProfiles.AsNoTracking().FirstOrDefaultAsync(x => x.UserId == userId);
@@ -43,7 +36,7 @@ public class NutritionController : ControllerBase
     [HttpGet("log")]
     public async Task<IActionResult> Log([FromQuery] DateTime? date)
     {
-        var userId = CurrentUserId();
+        var userId = User.CurrentUserId();
         if (userId == null) return Unauthorized();
 
         var day = (date ?? DateTime.UtcNow).Date;
@@ -75,7 +68,7 @@ public class NutritionController : ControllerBase
     [HttpPost("log/foods")]
     public async Task<IActionResult> AddFood([FromBody] FoodLogRequest request)
     {
-        var userId = CurrentUserId();
+        var userId = User.CurrentUserId();
         if (userId == null) return Unauthorized();
         if (string.IsNullOrWhiteSpace(request.Name)) return BadRequest(new { message = "Name required" });
         if (request.Date.HasValue && request.Date.Value.Date > DateTime.UtcNow.Date.AddDays(1))
@@ -101,7 +94,7 @@ public class NutritionController : ControllerBase
     [HttpDelete("log/foods/{id}")]
     public async Task<IActionResult> DeleteFood(int id)
     {
-        var userId = CurrentUserId();
+        var userId = User.CurrentUserId();
         if (userId == null) return Unauthorized();
 
         var food = await _context.FoodLogEntries.FindAsync(id);
@@ -117,7 +110,7 @@ public class NutritionController : ControllerBase
     [HttpPut("log/water")]
     public async Task<IActionResult> SetWater([FromBody] WaterLogRequest request)
     {
-        var userId = CurrentUserId();
+        var userId = User.CurrentUserId();
         if (userId == null) return Unauthorized();
         if (request.Date.HasValue && request.Date.Value.Date > DateTime.UtcNow.Date.AddDays(1))
             return BadRequest(new { message = "Date cannot be in the future" });
@@ -140,7 +133,7 @@ public class NutritionController : ControllerBase
     [HttpPut("me")]
     public async Task<IActionResult> Save([FromBody] NutritionRequest req)
     {
-        var userId = CurrentUserId();
+        var userId = User.CurrentUserId();
         if (userId == null) return Unauthorized();
 
         var r = TdeeCalculator.Calc(req.Gender, req.WeightKg, req.HeightCm, req.Age, req.Activity, req.Goal);

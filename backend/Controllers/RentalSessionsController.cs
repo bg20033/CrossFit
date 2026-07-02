@@ -1,10 +1,10 @@
 using System.ComponentModel.DataAnnotations;
-using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using StandUpFitness.Data;
 using StandUpFitness.Models;
+using StandUpFitness.Services;
 
 namespace StandUpFitness.Controllers;
 
@@ -27,23 +27,33 @@ public class RentalSessionsController : ControllerBase
     private static readonly string[] Days =
         { "Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday" };
 
-    private int? CurrentUserId()
-    {
-        var claim = User.FindFirst(ClaimTypes.NameIdentifier);
-        return int.TryParse(claim?.Value, out var id) ? id : null;
-    }
-
-    private bool IsAdmin() => User.IsInRole("Admin") || User.IsInRole("GymOwner");
+    private bool IsAdmin() => User.IsAdminOrOwner();
 
     private async Task<int?> ResolveTenantIdAsync(int? requestedTenantId)
     {
         if (IsAdmin())
             return requestedTenantId; // admin may view all (null) or filter by a specific tenant
 
-        var userId = CurrentUserId();
+        var userId = User.CurrentUserId();
         if (userId == null) return null;
         var own = await _context.TrainerTenants.FirstOrDefaultAsync(t => t.UserId == userId);
         return own?.Id; // a qiragji only ever sees their own sessions, regardless of query param
+    }
+
+    private async Task<TenantClientScheduleOwner?> ResolveTenantClientOwnerAsync()
+    {
+        var userId = User.CurrentUserId();
+        if (userId == null) return null;
+
+        return await _context.TenantClients
+            .Where(c => c.UserId == userId.Value && c.IsActive)
+            .Select(c => new TenantClientScheduleOwner(
+                c.Id,
+                c.Name,
+                c.TrainerTenantId,
+                c.TrainerTenant.BusinessName,
+                c.TrainerTenant.User.Name))
+            .FirstOrDefaultAsync();
     }
 
     // GET: api/rentalsessions?tenantId=1&year=2026&month=7
@@ -87,6 +97,84 @@ public class RentalSessionsController : ControllerBase
             .ToListAsync();
 
         return Ok(sessions);
+    }
+
+    // GET: api/rentalsessions/tenant-client?year=2026&month=7
+    // Tenant clients are isolated from core Clients/Attendance. Their calendar is
+    // the qiragji's own rental schedule, with saved cancellations/postponements
+    // overlaid when the tenant trainer has generated concrete sessions.
+    [HttpGet("tenant-client")]
+    public async Task<IActionResult> GetTenantClientSchedule([FromQuery] int? year, [FromQuery] int? month)
+    {
+        if (!User.IsInRole(nameof(UserRole.TenantClient))) return Forbid();
+
+        var owner = await ResolveTenantClientOwnerAsync();
+        if (owner == null) return NotFound(new { message = "Profili i klientit të qiragjisë nuk u gjet." });
+
+        year ??= DateTime.UtcNow.Year;
+        month ??= DateTime.UtcNow.Month;
+        if (month < 1 || month > 12) return BadRequest(new { message = "Muaj i pavlefshëm" });
+        if (year < 2000 || year > DateTime.UtcNow.Year + 1) return BadRequest(new { message = "Vit i pavlefshëm" });
+
+        var start = new DateTime(year.Value, month.Value, 1);
+        var end = start.AddMonths(1);
+        var slots = await _context.RentalScheduleSlots
+            .Where(s => s.TrainerTenantId == owner.TenantId)
+            .AsNoTracking()
+            .ToListAsync();
+        var saved = await _context.RentalSessions
+            .Where(s => s.TrainerTenantId == owner.TenantId && s.Date >= start && s.Date < end)
+            .AsNoTracking()
+            .ToListAsync();
+
+        var rows = saved
+            .Select(s => new TenantClientSessionDto(
+                s.Id,
+                s.Date,
+                s.DayOfWeek,
+                s.StartMin,
+                s.EndMin,
+                s.Status,
+                s.Reason,
+                s.PostponedToDate,
+                false))
+            .ToList();
+
+        var existing = saved.Select(s => $"{s.Date:yyyy-MM-dd}:{s.StartMin}:{s.EndMin}").ToHashSet();
+        var daysInMonth = DateTime.DaysInMonth(year.Value, month.Value);
+        for (var day = 0; day < daysInMonth; day++)
+        {
+            var date = start.AddDays(day);
+            var dayName = Days[(int)date.DayOfWeek];
+            foreach (var slot in slots.Where(s => s.DayOfWeek == dayName))
+            {
+                var key = $"{date:yyyy-MM-dd}:{slot.StartMin}:{slot.EndMin}";
+                if (existing.Contains(key)) continue;
+
+                rows.Add(new TenantClientSessionDto(
+                    null,
+                    date,
+                    dayName,
+                    slot.StartMin,
+                    slot.EndMin,
+                    "scheduled",
+                    null,
+                    null,
+                    true));
+            }
+        }
+
+        return Ok(new
+        {
+            owner.TenantClientId,
+            Name = owner.ClientName,
+            owner.TenantId,
+            owner.BusinessName,
+            Trainer = owner.TrainerName,
+            year,
+            month,
+            sessions = rows.OrderBy(s => s.Date).ThenBy(s => s.StartMin)
+        });
     }
 
     // POST: api/rentalsessions/generate
@@ -227,3 +315,16 @@ public class RentalSessionPostponeRequest
     public DateTime NewDate { get; set; }
     [MaxLength(500)] public string? Reason { get; set; }
 }
+
+public record TenantClientScheduleOwner(int TenantClientId, string ClientName, int TenantId, string BusinessName, string TrainerName);
+
+public record TenantClientSessionDto(
+    int? Id,
+    DateTime Date,
+    string DayOfWeek,
+    int StartMin,
+    int EndMin,
+    string Status,
+    string? Reason,
+    DateTime? PostponedToDate,
+    bool Virtual);

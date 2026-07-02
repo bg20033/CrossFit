@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using StandUpFitness.Data;
 using StandUpFitness.Models;
+using StandUpFitness.Services;
 
 namespace StandUpFitness.Controllers;
 
@@ -22,10 +23,17 @@ public class TrainingGroupsController : ControllerBase
     [HttpGet]
     public async Task<IActionResult> GetGroups([FromQuery] int? trainerId)
     {
-        var query = _context.TrainingGroups
-            .Include(g => g.Trainer)
-            .Include(g => g.Clients)
-            .AsQueryable();
+        // No Includes here: the Select projection below translates to SQL on its
+        // own, and Include + Select just wasted the eager-load work.
+        var query = _context.TrainingGroups.AsQueryable();
+
+        if (!User.CanManageCoreScope(permission: "schedule.write"))
+        {
+            var ownTrainerId = await _context.CurrentCoreTrainerIdAsync(User);
+            if (ownTrainerId == null) return Forbid();
+            if (trainerId.HasValue && trainerId.Value != ownTrainerId.Value) return Forbid();
+            trainerId = ownTrainerId;
+        }
 
         if (trainerId.HasValue)
             query = query.Where(g => g.TrainerId == trainerId);
@@ -67,6 +75,7 @@ public class TrainingGroupsController : ControllerBase
 
         if (group == null)
             return NotFound();
+        if (!await _context.CanAccessCoreTrainerAsync(User, group.TrainerId, "schedule.write")) return Forbid();
 
         return Ok(new
         {
@@ -99,6 +108,7 @@ public class TrainingGroupsController : ControllerBase
         var trainer = await _context.Trainers.FindAsync(request.TrainerId);
         if (trainer == null)
             return BadRequest("Trainer not found");
+        if (!await _context.CanAccessCoreTrainerAsync(User, request.TrainerId, "schedule.write")) return Forbid();
         if (request.MaxCapacity < 1)
             return BadRequest(new { message = "Capacity must be at least 1" });
 
@@ -134,11 +144,13 @@ public class TrainingGroupsController : ControllerBase
             .FirstOrDefaultAsync(g => g.Id == id);
         if (group == null)
             return NotFound();
+        if (!await _context.CanAccessCoreTrainerAsync(User, group.TrainerId, "schedule.write")) return Forbid();
 
         if (request.TrainerId.HasValue)
         {
             var trainer = await _context.Trainers.FindAsync(request.TrainerId.Value);
             if (trainer == null) return BadRequest(new { message = "Trainer not found" });
+            if (!User.CanManageCoreScope(permission: "schedule.write") && request.TrainerId.Value != group.TrainerId) return Forbid();
             group.TrainerId = request.TrainerId.Value;
         }
 
@@ -187,6 +199,7 @@ public class TrainingGroupsController : ControllerBase
 
         if (group == null)
             return NotFound();
+        if (!await _context.CanAccessCoreTrainerAsync(User, group.TrainerId, "schedule.write")) return Forbid();
 
         var client = await _context.Clients.FindAsync(request.ClientId);
         if (client == null)
@@ -233,6 +246,7 @@ public class TrainingGroupsController : ControllerBase
 
         if (group == null)
             return NotFound();
+        if (!await _context.CanAccessCoreTrainerAsync(User, group.TrainerId, "schedule.write")) return Forbid();
 
         var client = group.Clients.FirstOrDefault(c => c.Id == request.ClientId);
         if (client == null)
@@ -249,6 +263,7 @@ public class TrainingGroupsController : ControllerBase
     [HttpGet("{id}/waitlist")]
     public async Task<IActionResult> GetWaitlist(int id)
     {
+        if (!await _context.CanAccessCoreGroupAsync(User, id)) return Forbid();
         var rows = await _context.GroupWaitlistEntries
             .Where(w => w.TrainingGroupId == id)
             .OrderBy(w => w.Status)
@@ -264,28 +279,48 @@ public class TrainingGroupsController : ControllerBase
     {
         var group = await _context.TrainingGroups.Include(g => g.Clients).FirstOrDefaultAsync(g => g.Id == id);
         if (group == null) return NotFound();
+        if (!await _context.CanAccessCoreTrainerAsync(User, group.TrainerId, "schedule.write")) return Forbid();
         var promoted = await PromoteNextWaitlistAsync(group);
         await _context.SaveChangesAsync();
         return Ok(new { message = promoted ? "Client promoted from waitlist" : "No waiting client or group is full", promoted });
     }
 
     // POST: api/traininggroups/{id}/record-attendance
+    // Upserts per (group, client, day) — repeated marks used to insert duplicate
+    // rows with a full timestamp, inflating attendance rates (and with them the
+    // prorated trainer commissions). Now aligned with /api/attendance/batch:
+    // date-only rows, one per client per day.
     [HttpPost("{id}/record-attendance")]
     public async Task<IActionResult> RecordAttendance(int id, [FromBody] RecordAttendanceRequest request)
     {
-        var group = await _context.TrainingGroups.FindAsync(id);
+        var group = await _context.TrainingGroups
+            .Include(g => g.Clients)
+            .FirstOrDefaultAsync(g => g.Id == id);
         if (group == null)
             return NotFound();
+        if (!await _context.CanAccessCoreTrainerAsync(User, group.TrainerId, "schedule.write")) return Forbid();
+        if (!group.Clients.Any(c => c.Id == request.ClientId))
+            return BadRequest(new { message = "Client is not a member of this group" });
 
-        var attendance = new Attendance
+        var date = (request.Date ?? DateTime.UtcNow).Date;
+        var existing = await _context.Attendance.FirstOrDefaultAsync(a =>
+            a.GroupId == id && a.ClientId == request.ClientId && a.AttendanceDate == date);
+
+        if (existing == null)
         {
-            GroupId = id,
-            ClientId = request.ClientId,
-            AttendanceDate = DateTime.UtcNow,
-            IsPresent = request.IsPresent
-        };
+            _context.Attendance.Add(new Attendance
+            {
+                GroupId = id,
+                ClientId = request.ClientId,
+                AttendanceDate = date,
+                IsPresent = request.IsPresent
+            });
+        }
+        else
+        {
+            existing.IsPresent = request.IsPresent;
+        }
 
-        _context.Attendance.Add(attendance);
         await _context.SaveChangesAsync();
 
         return Ok(new { message = "Attendance recorded successfully" });
@@ -298,16 +333,17 @@ public class TrainingGroupsController : ControllerBase
         var group = await _context.TrainingGroups.FindAsync(id);
         if (group == null)
             return NotFound();
+        if (!await _context.CanAccessCoreTrainerAsync(User, group.TrainerId, "schedule.write")) return Forbid();
 
         year ??= DateTime.UtcNow.Year;
         month ??= DateTime.UtcNow.Month;
 
         var startDate = new DateTime(year.Value, month.Value, 1);
-        var endDate = startDate.AddMonths(1).AddDays(-1);
+        // Exclusive upper bound — the old "<= last day 00:00" dropped the final day.
+        var endDate = startDate.AddMonths(1);
 
         var attendance = await _context.Attendance
-            .Where(a => a.GroupId == id && a.AttendanceDate >= startDate && a.AttendanceDate <= endDate)
-            .Include(a => a.Client)
+            .Where(a => a.GroupId == id && a.AttendanceDate >= startDate && a.AttendanceDate < endDate)
             .GroupBy(a => a.ClientId)
             .Select(g => new
             {
@@ -322,61 +358,6 @@ public class TrainingGroupsController : ControllerBase
         return Ok(new { month = $"{year}-{month:D2}", attendance });
     }
 
-    // GET: api/traininggroups/suggest-for-client?clientId={id}
-    [HttpGet("suggest-for-client")]
-    public async Task<IActionResult> SuggestForClient([FromQuery] int clientId)
-    {
-        var client = await _context.Clients
-            .Include(c => c.Groups).ThenInclude(g => g.ScheduleSlots)
-            .FirstOrDefaultAsync(c => c.Id == clientId);
-
-        if (client == null)
-            return NotFound(new { message = "Client not found" });
-
-        var allGroups = await _context.TrainingGroups
-            .Include(g => g.Clients)
-            .Include(g => g.ScheduleSlots)
-            .ToListAsync();
-
-        var clientGroups = client.Groups.ToList();
-        var clientSlotTimes = clientGroups
-            .SelectMany(g => g.ScheduleSlots)
-            .Select(s => new { s.DayOfWeek, s.StartMin, s.EndMin })
-            .ToList();
-
-        var suggestions = allGroups
-            .Where(g => !g.Clients.Any(c => c.Id == clientId))
-            .Where(g => g.Clients.Count < g.MaxCapacity)
-            .Where(g =>
-            {
-                foreach (var slot in g.ScheduleSlots)
-                {
-                    foreach (var cs in clientSlotTimes)
-                    {
-                        if (string.Equals(cs.DayOfWeek, slot.DayOfWeek, StringComparison.OrdinalIgnoreCase) &&
-                            slot.StartMin < cs.EndMin && cs.StartMin < slot.EndMin)
-                        {
-                            return false;
-                        }
-                    }
-                }
-                return true;
-            })
-            .Select(g => new
-            {
-                g.Id,
-                g.Name,
-                g.Description,
-                g.MaxCapacity,
-                MembersCount = g.Clients.Count,
-                AvailableSlots = g.MaxCapacity - g.Clients.Count,
-                Slots = g.ScheduleSlots
-                    .OrderBy(s => DayIndex(s.DayOfWeek)).ThenBy(s => s.StartMin)
-                    .Select(s => new { s.DayOfWeek, s.StartMin, s.EndMin })
-            });
-
-        return Ok(suggestions);
-    }
 
     // Resolve incoming request into a validated set of weekly slots. Falls back to a
     // single slot built from the legacy DayOfWeek/ScheduleStart/ScheduleEnd fields
@@ -574,4 +555,6 @@ public class RecordAttendanceRequest
 {
     public int ClientId { get; set; }
     public bool IsPresent { get; set; }
+    /// <summary>Session day (date part only). Defaults to today.</summary>
+    public DateTime? Date { get; set; }
 }

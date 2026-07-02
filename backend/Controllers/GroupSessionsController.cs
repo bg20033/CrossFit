@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using StandUpFitness.Data;
 using StandUpFitness.Models;
+using StandUpFitness.Services;
 
 namespace StandUpFitness.Controllers;
 
@@ -26,10 +27,21 @@ public class GroupSessionsController : ControllerBase
     private static readonly string[] Days =
         { "Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday" };
 
+    private async Task<GroupSession?> LoadOwnSessionAsync(int id)
+    {
+        var session = await _context.GroupSessions
+            .Include(s => s.TrainingGroup)
+            .FirstOrDefaultAsync(s => s.Id == id);
+        if (session == null) return null;
+        return await _context.CanAccessCoreGroupAsync(User, session.TrainingGroupId) ? session : null;
+    }
+
     // GET: api/groupsessions?groupId=1&year=2026&month=6
     [HttpGet]
     public async Task<IActionResult> GetSessions([FromQuery] int? groupId, [FromQuery] int? year, [FromQuery] int? month)
     {
+        if (groupId.HasValue && !await _context.CanAccessCoreGroupAsync(User, groupId.Value)) return Forbid();
+
         year ??= DateTime.UtcNow.Year;
         month ??= DateTime.UtcNow.Month;
         var start = new DateTime(year.Value, month.Value, 1);
@@ -39,6 +51,13 @@ public class GroupSessionsController : ControllerBase
             .Include(s => s.TrainingGroup).ThenInclude(g => g.Trainer).ThenInclude(t => t.User)
             .Include(s => s.SubstituteTrainer).ThenInclude(t => t!.User)
             .Where(s => s.Date >= start && s.Date < end);
+
+        if (!User.CanManageCoreScope(permission: "schedule.write"))
+        {
+            var trainerId = await _context.CurrentCoreTrainerIdAsync(User);
+            if (trainerId == null) return Forbid();
+            query = query.Where(s => s.TrainingGroup.TrainerId == trainerId.Value);
+        }
 
         if (groupId.HasValue)
             query = query.Where(s => s.TrainingGroupId == groupId.Value);
@@ -82,6 +101,7 @@ public class GroupSessionsController : ControllerBase
             .Include(g => g.ScheduleSlots)
             .FirstOrDefaultAsync(g => g.Id == request.GroupId);
         if (group == null) return NotFound(new { message = "Group not found" });
+        if (!await _context.CanAccessCoreGroupAsync(User, group.Id)) return Forbid();
         if (group.ScheduleSlots.Count == 0)
             return BadRequest(new { message = "Group has no weekly schedule slots" });
 
@@ -123,7 +143,7 @@ public class GroupSessionsController : ControllerBase
     [HttpPost("{id}/cancel")]
     public async Task<IActionResult> Cancel(int id, [FromBody] SessionReasonRequest request)
     {
-        var session = await _context.GroupSessions.FindAsync(id);
+        var session = await LoadOwnSessionAsync(id);
         if (session == null) return NotFound();
         session.Status = "cancelled";
         session.Reason = request.Reason?.Trim();
@@ -136,7 +156,7 @@ public class GroupSessionsController : ControllerBase
     [HttpPost("{id}/postpone")]
     public async Task<IActionResult> Postpone(int id, [FromBody] PostponeRequest request)
     {
-        var session = await _context.GroupSessions.FindAsync(id);
+        var session = await LoadOwnSessionAsync(id);
         if (session == null) return NotFound();
         if (request.NewDate == default)
             return BadRequest(new { message = "A new date is required" });
@@ -152,7 +172,7 @@ public class GroupSessionsController : ControllerBase
     [HttpPost("{id}/substitute")]
     public async Task<IActionResult> Substitute(int id, [FromBody] SubstituteRequest request)
     {
-        var session = await _context.GroupSessions.FindAsync(id);
+        var session = await LoadOwnSessionAsync(id);
         if (session == null) return NotFound();
         if (request.SubstituteTrainerId.HasValue)
         {
@@ -169,7 +189,7 @@ public class GroupSessionsController : ControllerBase
     [HttpPost("{id}/mark-held")]
     public async Task<IActionResult> MarkHeld(int id)
     {
-        var session = await _context.GroupSessions.FindAsync(id);
+        var session = await LoadOwnSessionAsync(id);
         if (session == null) return NotFound();
         session.Status = "held";
         session.UpdatedAt = DateTime.UtcNow;
@@ -182,8 +202,8 @@ public class GroupSessionsController : ControllerBase
     [HttpPost("{id}/trainer-checkin")]
     public async Task<IActionResult> TrainerCheckin(int id)
     {
-        var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-        if (!int.TryParse(userId, out var uid)) return Unauthorized();
+        var uid = User.CurrentUserId();
+        if (uid == null) return Unauthorized();
 
         var session = await _context.GroupSessions
             .Include(s => s.TrainingGroup).ThenInclude(g => g.Trainer)
@@ -192,7 +212,7 @@ public class GroupSessionsController : ControllerBase
 
         // Only the group's trainer, the assigned substitute, or an admin may check in.
         var isAdmin = User.IsInRole("Admin") || User.IsInRole("GymOwner");
-        var ownTrainer = await _context.Trainers.FirstOrDefaultAsync(t => t.UserId == uid);
+        var ownTrainer = await _context.Trainers.FirstOrDefaultAsync(t => t.UserId == uid.Value);
         if (!isAdmin)
         {
             bool isGroupTrainer = ownTrainer != null && session.TrainingGroup.TrainerId == ownTrainer.Id;
@@ -213,7 +233,7 @@ public class GroupSessionsController : ControllerBase
     [HttpPost("{id}/reset")]
     public async Task<IActionResult> Reset(int id)
     {
-        var session = await _context.GroupSessions.FindAsync(id);
+        var session = await LoadOwnSessionAsync(id);
         if (session == null) return NotFound();
         session.Status = "scheduled";
         session.Reason = null;

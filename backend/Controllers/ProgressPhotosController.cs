@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using StandUpFitness.Data;
 using StandUpFitness.Models;
+using StandUpFitness.Services;
 
 namespace StandUpFitness.Controllers;
 
@@ -16,20 +17,10 @@ public class ProgressPhotosController : ControllerBase
     private readonly FitnessContext _context;
     public ProgressPhotosController(FitnessContext context) => _context = context;
 
-    private async Task<bool> CanAccessClientAsync(int clientId)
-    {
-        if (User.IsInRole("Admin") || User.IsInRole("GymOwner") || User.IsInRole("Trainer") || User.IsInRole("Staff"))
-            return true;
-        var uid = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-        if (!int.TryParse(uid, out var userId)) return false;
-        var own = await _context.Clients.Where(c => c.UserId == userId).Select(c => (int?)c.Id).FirstOrDefaultAsync();
-        return own == clientId;
-    }
-
     [HttpGet]
     public async Task<IActionResult> Get([FromQuery] int clientId)
     {
-        if (!await CanAccessClientAsync(clientId)) return Forbid();
+        if (!await _context.CanAccessCoreClientAsync(User, clientId)) return Forbid();
         var rows = await _context.ProgressPhotos
             .Where(p => p.ClientId == clientId)
             .OrderByDescending(p => p.Date)
@@ -42,7 +33,7 @@ public class ProgressPhotosController : ControllerBase
     public async Task<IActionResult> Create([FromBody] ProgressPhotoRequest request)
     {
         if (request.ClientId < 1) return BadRequest(new { message = "Client is required" });
-        if (!await CanAccessClientAsync(request.ClientId)) return Forbid();
+        if (!await _context.CanAccessCoreClientAsync(User, request.ClientId)) return Forbid();
         if (string.IsNullOrWhiteSpace(request.DataUrl)) return BadRequest(new { message = "Image required" });
         if (!request.DataUrl.StartsWith("data:image/", StringComparison.OrdinalIgnoreCase))
             return BadRequest(new { message = "Image must be a data URL" });
@@ -71,7 +62,7 @@ public class ProgressPhotosController : ControllerBase
     {
         var photo = await _context.ProgressPhotos.FindAsync(id);
         if (photo == null) return NotFound();
-        if (!await CanAccessClientAsync(photo.ClientId)) return Forbid();
+        if (!await _context.CanAccessCoreClientAsync(User, photo.ClientId)) return Forbid();
         _context.ProgressPhotos.Remove(photo);
         await _context.SaveChangesAsync();
         return Ok(new { message = "Deleted" });

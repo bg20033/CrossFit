@@ -1,10 +1,10 @@
 using Microsoft.AspNetCore.Authorization;
 using System.ComponentModel.DataAnnotations;
-using System.Security.Claims;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using StandUpFitness.Data;
 using StandUpFitness.Models;
+using StandUpFitness.Services;
 
 namespace StandUpFitness.Controllers;
 
@@ -25,17 +25,11 @@ public class LeaderboardController : ControllerBase
 
     public LeaderboardController(FitnessContext context) => _context = context;
 
-    private int? CurrentUserId()
-    {
-        var c = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-        return int.TryParse(c, out var id) ? id : null;
-    }
-
     // GET: api/leaderboard/prs — the current user's logged records
     [HttpGet("prs")]
     public async Task<IActionResult> MyPrs()
     {
-        var uid = CurrentUserId();
+        var uid = User.CurrentUserId();
         if (uid == null) return Forbid();
         var rows = await _context.PersonalRecords
             .Where(p => p.UserId == uid)
@@ -71,7 +65,7 @@ public class LeaderboardController : ControllerBase
     [HttpPost("prs")]
     public async Task<IActionResult> Create([FromBody] PrRequest request)
     {
-        var uid = CurrentUserId();
+        var uid = User.CurrentUserId();
         if (uid == null) return Forbid();
         if (string.IsNullOrWhiteSpace(request.Benchmark)) return BadRequest(new { message = "benchmark required" });
         if (request.Value <= 0) return BadRequest(new { message = "value must be greater than zero" });
@@ -94,7 +88,7 @@ public class LeaderboardController : ControllerBase
     [HttpDelete("prs/{id}")]
     public async Task<IActionResult> Delete(int id)
     {
-        var uid = CurrentUserId();
+        var uid = User.CurrentUserId();
         var pr = await _context.PersonalRecords.FindAsync(id);
         if (pr == null) return NotFound();
         if (pr.UserId != uid) return Forbid();

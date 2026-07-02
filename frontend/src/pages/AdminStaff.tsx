@@ -2,6 +2,7 @@ import { User } from 'lucide-react'
 import { useState, useEffect } from 'react'
 import { Button } from '../components/ui/button'
 import { useNotification } from '../contexts/NotificationContext'
+import TeamTabs from '../components/app/TeamTabs'
 import api from '../utils/api'
 import { toDecimal } from '../utils/number'
 import { eur, shortDate } from '../utils/format'
@@ -24,12 +25,14 @@ interface Staff {
   position: string
   salary: number
   isActive: boolean
+  role: string
   hireDate: string
 }
 
-const emptyStaff = { name: '', email: '', password: '', position: '', salary: '0' }
+const emptyStaff = { name: '', email: '', password: '', position: '', salary: '0', role: 'Staff' }
 const now = new Date()
 const emptySalary = { year: String(now.getFullYear()), month: String(now.getMonth() + 1), hoursWorked: '160', bonus: '0', deductions: '0' }
+const roleLabel = (role: string) => role === 'Cashier' ? 'Arka' : 'Staf'
 
 export default function AdminStaff() {
   const { addNotification } = useNotification()
@@ -84,7 +87,7 @@ export default function AdminStaff() {
         bonus: toDecimal(salary.bonus),
         deductions: toDecimal(salary.deductions),
       })
-      const total = res.data?.total ?? res.data?.totalSalary ?? res.data?.netSalary
+      const total = res.data?.totalAmount ?? res.data?.total ?? res.data?.totalSalary ?? res.data?.netSalary
       setSalaryResult(total != null ? `Rroga e llogaritur: ${eur(total)}` : 'Rroga u llogarit.')
     } catch (err: any) {
       setSalaryResult(err.response?.data?.message || 'Llogaritja dështoi')
@@ -109,6 +112,8 @@ export default function AdminStaff() {
         }
       />
 
+      <TeamTabs />
+
       {error && <div className="rounded-lg border border-gray-300 bg-gray-100 px-4 py-2.5 text-sm text-gray-800">{error}</div>}
 
       {showForm && (
@@ -120,6 +125,12 @@ export default function AdminStaff() {
               <Field label="Fjalëkalimi"><input type="password" name="password" value={form.password} onChange={change} required minLength={8} className={fieldCls} /></Field>
               <Field label="Pozicioni"><input name="position" value={form.position} onChange={change} required placeholder="p.sh. Recepsionist" className={fieldCls} /></Field>
               <Field label="Rroga bazë (€)"><input type="text" inputMode="decimal" name="salary" value={form.salary} onChange={change} className={fieldCls} /></Field>
+              <Field label="Roli">
+                <select name="role" value={form.role} onChange={change} className={fieldCls}>
+                  <option value="Staff">Staf / Recepsion</option>
+                  <option value="Cashier">Arka</option>
+                </select>
+              </Field>
             </div>
             <Button type="submit" className={primaryBtn}>Krijo</Button>
           </form>
@@ -138,6 +149,7 @@ export default function AdminStaff() {
                 <tr className="border-b border-gray-100 text-left text-xs uppercase tracking-wide text-gray-400">
                   <th className="px-3 py-2 font-semibold">Emri</th>
                   <th className="px-3 py-2 font-semibold">Pozicioni</th>
+                  <th className="px-3 py-2 font-semibold">Roli</th>
                   <th className="px-3 py-2 font-semibold">Rroga</th>
                   <th className="px-3 py-2 font-semibold">Punësuar</th>
                   <th className="px-3 py-2 font-semibold">Statusi</th>
@@ -152,6 +164,7 @@ export default function AdminStaff() {
                       <p className="text-xs text-gray-400">{s.email}</p>
                     </td>
                     <td className="px-3 py-3 text-gray-600">{s.position}</td>
+                    <td className="px-3 py-3"><Badge accent={s.role === 'Cashier' ? 'orange' : 'gray'}>{roleLabel(s.role)}</Badge></td>
                     <td className="px-3 py-3 text-gray-800">{eur(s.salary)}</td>
                     <td className="px-3 py-3 text-gray-600">{shortDate(s.hireDate)}</td>
                     <td className="px-3 py-3"><Badge accent={s.isActive ? 'green' : 'gray'}>{s.isActive ? 'Aktiv' : 'Pasiv'}</Badge></td>

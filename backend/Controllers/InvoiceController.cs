@@ -1,21 +1,25 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using System.ComponentModel.DataAnnotations;
 using StandUpFitness.Data;
 using StandUpFitness.Models;
+using StandUpFitness.Services;
 
 namespace StandUpFitness.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
-[Authorize(Policy = "AdminStaff")]
+[Authorize(Policy = "Desk")]
 public class InvoiceController : ControllerBase
 {
     private readonly FitnessContext _context;
+    private readonly IInvoicePaymentService _payments;
 
-    public InvoiceController(FitnessContext context)
+    public InvoiceController(FitnessContext context, IInvoicePaymentService payments)
     {
         _context = context;
+        _payments = payments;
     }
 
     // GET: api/invoice/{id}
@@ -25,6 +29,7 @@ public class InvoiceController : ControllerBase
         var invoice = await _context.Invoices
             .Include(i => i.Client).ThenInclude(c => c.User)
             .Include(i => i.Items)
+            .AsNoTracking()
             .FirstOrDefaultAsync(i => i.Id == id);
 
         if (invoice == null)
@@ -53,7 +58,13 @@ public class InvoiceController : ControllerBase
     {
         var client = await _context.Clients.FindAsync(request.ClientId);
         if (client == null)
-            return BadRequest("Client not found");
+            return BadRequest(new { message = "Client not found" });
+        if (request.Items.Count == 0)
+            return BadRequest(new { message = "Invoice needs at least one item" });
+        if (request.Items.Any(i => i.Quantity < 1 || i.UnitPrice < 0))
+            return BadRequest(new { message = "Each item needs quantity ≥ 1 and a non-negative price" });
+        if (request.TaxPercent < 0 || request.TaxPercent > 100)
+            return BadRequest(new { message = "Tax percent must be between 0 and 100" });
 
         // Idempotency: dedupe retries/double-clicks.
         if (!string.IsNullOrEmpty(request.IdempotencyKey))
@@ -63,16 +74,15 @@ public class InvoiceController : ControllerBase
                 return Ok(new { message = "Invoice already created", id = dup.Id, invoiceNumber = dup.InvoiceNumber, totalAmount = dup.TotalAmount, idempotent = true });
         }
 
-        var invoiceNumber = $"INV-{DateTime.UtcNow:yyyyMMdd}-{new Random().Next(1000, 9999)}";
         var subtotal = request.Items.Sum(i => i.Quantity * i.UnitPrice);
-        var taxAmount = subtotal * (request.TaxPercent / 100);
+        var taxAmount = Math.Round(subtotal * (request.TaxPercent / 100), 2);
         var totalAmount = subtotal + taxAmount;
 
         var invoice = new Invoice
         {
-            InvoiceNumber = invoiceNumber,
+            InvoiceNumber = DocumentNumbers.Invoice(),
             ClientId = request.ClientId,
-            StaffId = int.Parse(User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value ?? "0"),
+            StaffId = User.CurrentUserId(),
             Description = request.Description,
             Subtotal = subtotal,
             TaxAmount = taxAmount,
@@ -108,6 +118,8 @@ public class InvoiceController : ControllerBase
     }
 
     // POST: api/invoice/{id}/mark-paid
+    // All payment side effects (finance income, membership activation, GAP-7
+    // group auto-enroll) live in InvoicePaymentService — shared with /api/payments.
     [HttpPost("{id}/mark-paid")]
     public async Task<IActionResult> MarkAsPaid(int id, [FromBody] MarkPaidRequest request)
     {
@@ -117,78 +129,43 @@ public class InvoiceController : ControllerBase
         if (invoice == null)
             return NotFound();
 
-        invoice.Status = "paid";
-        invoice.PaidDate = DateTime.UtcNow;
-        invoice.PaymentMethod = request.PaymentMethod ?? invoice.PaymentMethod;
-
-        // Create finance transaction
-        var finance = new Finance
-        {
-            Type = "income",
-            CategoryId = (await _context.FinanceCategories.FirstOrDefaultAsync(fc => fc.Name == "Member Payments"))?.Id ?? 1,
-            Amount = invoice.TotalAmount,
-            Description = $"Payment for {invoice.InvoiceNumber}",
-            PaymentMethod = invoice.PaymentMethod,
-            TransactionDate = DateTime.UtcNow,
-            Status = "completed"
-        };
-
-        _context.Finances.Add(finance);
-
-        // GAP-7: auto-enroll the client into any group tied to a paid invoice line.
-        var groupIds = invoice.Items
-            .Where(it => it.GroupId.HasValue)
-            .Select(it => it.GroupId!.Value)
-            .Distinct()
-            .ToList();
-        if (groupIds.Count > 0)
-        {
-            var client = await _context.Clients
-                .Include(c => c.Groups)
-                .FirstOrDefaultAsync(c => c.Id == invoice.ClientId);
-            if (client != null)
-            {
-                var groups = await _context.TrainingGroups
-                    .Include(g => g.Clients)
-                    .Where(g => groupIds.Contains(g.Id))
-                    .ToListAsync();
-                foreach (var g in groups)
-                {
-                    if (client.Groups.Any(x => x.Id == g.Id)) continue;
-                    if (g.Clients.Count >= g.MaxCapacity)
-                    {
-                        var waiting = await _context.GroupWaitlistEntries.AnyAsync(w =>
-                            w.TrainingGroupId == g.Id && w.ClientId == client.Id && w.Status == "waiting");
-                        if (!waiting)
-                            _context.GroupWaitlistEntries.Add(new GroupWaitlistEntry
-                            {
-                                TrainingGroupId = g.Id,
-                                ClientId = client.Id
-                            });
-                    }
-                    else
-                    {
-                        g.Clients.Add(client);
-                    }
-                }
-            }
-        }
+        var (applied, error) = await _payments.MarkPaidAsync(invoice, request.PaymentMethod, User.CurrentUserId());
+        if (error != null)
+            return BadRequest(new { message = error });
+        if (!applied)
+            return Ok(new { message = "Invoice is already paid", idempotent = true });
 
         await _context.SaveChangesAsync();
 
         return Ok(new { message = "Invoice marked as paid" });
     }
 
+    // POST: api/invoice/{id}/cancel — pending invoices only.
+    [HttpPost("{id}/cancel")]
+    public async Task<IActionResult> Cancel(int id)
+    {
+        var invoice = await _context.Invoices.FindAsync(id);
+        if (invoice == null) return NotFound();
+        if (invoice.Status != "pending")
+            return BadRequest(new { message = $"Only pending invoices can be cancelled (current: {invoice.Status})" });
+
+        invoice.Status = "cancelled";
+        invoice.UpdatedAt = DateTime.UtcNow;
+        await _context.SaveChangesAsync();
+        return Ok(new { message = "Invoice cancelled" });
+    }
+
     // GET: api/invoice/client/{clientId}
     [HttpGet("client/{clientId}")]
     public async Task<IActionResult> GetClientInvoices(int clientId, [FromQuery] int page = 1, [FromQuery] int pageSize = 10)
     {
-        var total = await _context.Invoices
-            .Where(i => i.ClientId == clientId)
-            .CountAsync();
+        page = Math.Max(1, page);
+        pageSize = Math.Clamp(pageSize, 1, 100);
 
-        var invoices = await _context.Invoices
-            .Where(i => i.ClientId == clientId)
+        var query = _context.Invoices.Where(i => i.ClientId == clientId);
+        var total = await query.CountAsync();
+
+        var invoices = await query
             .OrderByDescending(i => i.CreatedAt)
             .Skip((page - 1) * pageSize)
             .Take(pageSize)
@@ -211,8 +188,8 @@ public class InvoiceController : ControllerBase
     public async Task<IActionResult> GetPendingInvoices()
     {
         var invoices = await _context.Invoices
+            .Include(i => i.Client).ThenInclude(c => c.User)
             .Where(i => i.Status == "pending")
-            .Include(i => i.Client)
             .OrderByDescending(i => i.DueDate)
             .Select(i => new
             {
@@ -231,27 +208,98 @@ public class InvoiceController : ControllerBase
             i.Client,
             i.TotalAmount,
             i.DueDate,
-            DaysOverdue = (DateTime.UtcNow - i.DueDate).Days
+            DaysOverdue = Math.Max(0, (DateTime.UtcNow - i.DueDate).Days)
         });
 
         return Ok(result);
     }
+
+    // GET: api/invoice/suggest-for-client?clientId={id}
+    // Suggests training groups that fit a client, used when creating an invoice.
+    [HttpGet("suggest-for-client")]
+    public async Task<IActionResult> SuggestForClient([FromQuery] int clientId)
+    {
+        var client = await _context.Clients
+            .Include(c => c.Groups).ThenInclude(g => g.ScheduleSlots)
+            .FirstOrDefaultAsync(c => c.Id == clientId);
+
+        if (client == null)
+            return NotFound(new { message = "Client not found" });
+
+        var allGroups = await _context.TrainingGroups
+            .Include(g => g.Clients)
+            .Include(g => g.ScheduleSlots)
+            .ToListAsync();
+
+        // Trainers only see their own groups; staff/cashier/admin see all groups.
+        if (User.IsInRole("Trainer") && !User.CanManageCoreScope(permission: "schedule.write"))
+        {
+            var trainerId = await _context.CurrentCoreTrainerIdAsync(User);
+            if (trainerId == null) return Forbid();
+            allGroups = allGroups.Where(g => g.TrainerId == trainerId.Value).ToList();
+        }
+
+        var clientGroups = client.Groups.ToList();
+        var clientSlotTimes = clientGroups
+            .SelectMany(g => g.ScheduleSlots)
+            .Select(s => new { s.DayOfWeek, s.StartMin, s.EndMin })
+            .ToList();
+
+        var suggestions = allGroups
+            .Where(g => !g.Clients.Any(c => c.Id == clientId))
+            .Where(g => g.Clients.Count < g.MaxCapacity)
+            .Where(g =>
+            {
+                foreach (var slot in g.ScheduleSlots)
+                {
+                    foreach (var cs in clientSlotTimes)
+                    {
+                        if (string.Equals(cs.DayOfWeek, slot.DayOfWeek, StringComparison.OrdinalIgnoreCase) &&
+                            slot.StartMin < cs.EndMin && cs.StartMin < slot.EndMin)
+                        {
+                            return false;
+                        }
+                    }
+                }
+                return true;
+            })
+            .Select(g => new
+            {
+                g.Id,
+                g.Name,
+                g.Description,
+                g.MaxCapacity,
+                MembersCount = g.Clients.Count,
+                AvailableSlots = g.MaxCapacity - g.Clients.Count,
+                Slots = g.ScheduleSlots
+                    .OrderBy(s => DayIndex(s.DayOfWeek)).ThenBy(s => s.StartMin)
+                    .Select(s => new { s.DayOfWeek, s.StartMin, s.EndMin })
+            });
+
+        return Ok(suggestions);
+    }
+
+    private static readonly string[] ValidDays =
+        { "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday" };
+
+    private static int DayIndex(string day) =>
+        Array.FindIndex(ValidDays, d => d.Equals(day, StringComparison.OrdinalIgnoreCase));
 }
 
 public class CreateInvoiceRequest
 {
     public int ClientId { get; set; }
-    public string Description { get; set; } = string.Empty;
+    [MaxLength(300)] public string Description { get; set; } = string.Empty;
     public List<InvoiceItemRequest> Items { get; set; } = new();
-    public decimal TaxPercent { get; set; } = 0;
-    public string PaymentMethod { get; set; } = "cash";
+    [Range(0, 100)] public decimal TaxPercent { get; set; } = 0;
+    [MaxLength(30)] public string PaymentMethod { get; set; } = "cash";
     public DateTime? DueDate { get; set; }
-    public string? IdempotencyKey { get; set; }
+    [MaxLength(80)] public string? IdempotencyKey { get; set; }
 }
 
 public class InvoiceItemRequest
 {
-    public string Description { get; set; } = null!;
+    [Required, MaxLength(300)] public string Description { get; set; } = null!;
     public int Quantity { get; set; }
     public decimal UnitPrice { get; set; }
     public int? GroupId { get; set; }
@@ -259,5 +307,5 @@ public class InvoiceItemRequest
 
 public class MarkPaidRequest
 {
-    public string? PaymentMethod { get; set; }
+    [MaxLength(30)] public string? PaymentMethod { get; set; }
 }

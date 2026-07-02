@@ -2,9 +2,9 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using System.ComponentModel.DataAnnotations;
-using System.Security.Claims;
 using StandUpFitness.Data;
 using StandUpFitness.Models;
+using StandUpFitness.Services;
 
 namespace StandUpFitness.Controllers;
 
@@ -22,15 +22,13 @@ public class GymNoticesController : ControllerBase
         _context = context;
     }
 
-    private int? CurrentUserId()
-    {
-        var claim = User.FindFirst(ClaimTypes.NameIdentifier);
-        return int.TryParse(claim?.Value, out var id) ? id : null;
-    }
-
     private UserRole? CurrentRole()
     {
-        var role = User.FindFirst(ClaimTypes.Role)?.Value;
+        // Tokens carry the role under the short "role" claim type (JWT is
+        // configured with MapInboundClaims=false). ClaimTypes.Role (the long
+        // URI) never matched, so Mine() returned 401 for every user and nobody
+        // ever saw the notices list.
+        var role = User.FindFirst("role")?.Value;
         return Enum.TryParse<UserRole>(role, ignoreCase: true, out var parsed) ? parsed : null;
     }
 
@@ -95,7 +93,7 @@ public class GymNoticesController : ControllerBase
     [Authorize(Policy = "AdminOnly")]
     public async Task<IActionResult> Create([FromBody] CreateGymNoticeRequest request)
     {
-        var userId = CurrentUserId();
+        var userId = User.CurrentUserId();
         if (userId == null) return Unauthorized();
 
         var type = Normalize(request.Type, NoticeTypes, "announcement");

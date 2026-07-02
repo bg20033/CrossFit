@@ -1,7 +1,10 @@
 import { ArrowDownRight, ArrowUpRight, Receipt, Sigma } from 'lucide-react'
 import { useState, useEffect } from 'react'
 import { Button } from '../components/ui/button'
+import { useAuth } from '../contexts/AuthContext'
 import { useNotification } from '../contexts/NotificationContext'
+import { hasPermission } from '../lib/roles'
+import FinanceTabs from '../components/app/FinanceTabs'
 import api from '../utils/api'
 import { toDecimal } from '../utils/number'
 import { eur, shortDate } from '../utils/format'
@@ -52,6 +55,7 @@ const MONTHS = ['Jan', 'Shk', 'Mar', 'Pri', 'Maj', 'Qer', 'Korr', 'Gush', 'Sht',
 const empty = { type: 'income', amount: '', description: '', categoryId: '', paymentMethod: 'cash' }
 
 export default function AdminFinance() {
+  const { user } = useAuth()
   const { addNotification } = useNotification()
   const [transactions, setTransactions] = useState<Transaction[]>([])
   const [summary, setSummary] = useState<Summary>({ totalIncome: 0, totalExpenses: 0, balance: 0 })
@@ -144,6 +148,7 @@ export default function AdminFinance() {
   }
 
   const visibleCats = categories.filter((c) => c.type === form.type)
+  const canWrite = hasPermission(user?.permissions, ['finance.write'])
 
   const change = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target
@@ -162,12 +167,14 @@ export default function AdminFinance() {
         badge="Financa"
         title="Financat"
         subtitle="Të hyrat, shpenzimet dhe transaksionet e palestrës."
-        right={
+        right={canWrite ? (
           <Button onClick={() => setShowForm((v) => !v)} className="bg-coral-500 text-white hover:bg-coral-600">
             {showForm ? 'Mbyll' : '+ Transaksion'}
           </Button>
-        }
+        ) : undefined}
       />
+
+      <FinanceTabs />
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         <StatCard icon={<ArrowUpRight className="h-5 w-5" />} accent="green" label="Të hyrat" value={eur(summary.totalIncome)} />
@@ -242,7 +249,7 @@ export default function AdminFinance() {
         <div className="rounded-lg border border-gray-300 bg-gray-100 px-4 py-2.5 text-sm text-gray-800">{error}</div>
       )}
 
-      {showForm && (
+      {showForm && canWrite && (
         <Panel title="Shto transaksion">
           <form onSubmit={add} className="space-y-4">
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -328,7 +335,10 @@ export default function AdminFinance() {
         {loading ? (
           <p className="py-6 text-center text-sm text-gray-400">Duke ngarkuar…</p>
         ) : transactions.length === 0 ? (
-          <EmptyState icon={<Receipt className="h-5 w-5" />} text="Ende s'ka transaksione. Shto të parin me '+ Transaksion'." />
+          <EmptyState
+            icon={<Receipt className="h-5 w-5" />}
+            text={canWrite ? "Ende s'ka transaksione. Shto të parin me '+ Transaksion'." : "Ende s'ka transaksione për këtë filtër."}
+          />
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">

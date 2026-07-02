@@ -3,7 +3,6 @@ import { useEffect, useState } from 'react'
 import { Badge, DashboardHeader, DashboardShell, EmptyState, Panel, Skeleton } from '../components/DashboardKit'
 import { Button } from '../components/ui/button'
 import { useNotification } from '../contexts/NotificationContext'
-import { useAuth } from '../contexts/AuthContext'
 import api from '../utils/api'
 
 const empty = { name: '', phone: '', goal: '', sessionsLeft: '10' }
@@ -25,7 +24,6 @@ function sessionsLabel(notes: string) {
 
 export default function TenantClients() {
   const { addNotification } = useNotification()
-  const { profileId } = useAuth()
   const [clients, setClients] = useState<TenantClientRow[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -36,7 +34,7 @@ export default function TenantClients() {
     try {
       setLoading(true)
       setError('')
-      const res = await api.get(`/rentals/tenant/clients?tenantId=${profileId}`)
+      const res = await api.get('/rentals/tenant/clients')
       setClients(Array.isArray(res.data) ? res.data : [])
     } catch (err: any) {
       setError(err.response?.data?.message || 'Klientët e tenant-it nuk u ngarkuan. Kontrollo rolin/profilin e qirasë.')
@@ -61,7 +59,6 @@ export default function TenantClients() {
       phone: form.phone.trim(),
       goal: form.goal.trim() || '-',
       notes: `${Number(form.sessionsLeft) || 0} seanca të mbetura`,
-      tenantId: profileId,
     }
 
     try {

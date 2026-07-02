@@ -1,10 +1,10 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
-using System.Security.Claims;
 using System.Text.Json;
 using StandUpFitness.Data;
 using StandUpFitness.Models;
+using StandUpFitness.Services;
 
 namespace StandUpFitness.Controllers;
 
@@ -20,16 +20,10 @@ public class NotificationsController : ControllerBase
         _context = context;
     }
 
-    private int? CurrentUserId()
-    {
-        var claim = User.FindFirst(ClaimTypes.NameIdentifier);
-        return int.TryParse(claim?.Value, out var id) ? id : null;
-    }
-
     [HttpGet]
     public async Task<IActionResult> Mine([FromQuery] bool unreadOnly = false, [FromQuery] int pageSize = 30)
     {
-        var userId = CurrentUserId();
+        var userId = User.CurrentUserId();
         if (userId == null) return Unauthorized();
 
         var query = _context.UserNotifications.AsNoTracking().Where(n => n.UserId == userId);
@@ -47,7 +41,7 @@ public class NotificationsController : ControllerBase
     [HttpGet("unread-count")]
     public async Task<IActionResult> UnreadCount()
     {
-        var userId = CurrentUserId();
+        var userId = User.CurrentUserId();
         if (userId == null) return Unauthorized();
         var count = await _context.UserNotifications.CountAsync(n => n.UserId == userId && !n.IsRead);
         return Ok(new { count });
@@ -56,7 +50,7 @@ public class NotificationsController : ControllerBase
     [HttpPost("{id:int}/read")]
     public async Task<IActionResult> MarkRead(int id)
     {
-        var userId = CurrentUserId();
+        var userId = User.CurrentUserId();
         if (userId == null) return Unauthorized();
         var row = await _context.UserNotifications.FirstOrDefaultAsync(n => n.Id == id && n.UserId == userId);
         if (row == null) return NotFound();
@@ -69,7 +63,7 @@ public class NotificationsController : ControllerBase
     [HttpPost("read-all")]
     public async Task<IActionResult> MarkAllRead()
     {
-        var userId = CurrentUserId();
+        var userId = User.CurrentUserId();
         if (userId == null) return Unauthorized();
         var rows = await _context.UserNotifications.Where(n => n.UserId == userId && !n.IsRead).ToListAsync();
         foreach (var n in rows)
@@ -85,7 +79,7 @@ public class NotificationsController : ControllerBase
     [HttpGet("stream")]
     public async Task Stream(CancellationToken cancellationToken)
     {
-        var userId = CurrentUserId();
+        var userId = User.CurrentUserId();
         if (userId == null)
         {
             Response.StatusCode = StatusCodes.Status401Unauthorized;

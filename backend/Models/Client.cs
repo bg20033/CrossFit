@@ -8,6 +8,7 @@ public class Client
     public DateTime StartDate { get; set; } = DateTime.UtcNow;
     public bool IsActive { get; set; } = true;
     public string MembershipType { get; set; } = "standard";
+    public string DiscountCategory { get; set; } = "standard";
     public int? PlanId { get; set; }
     public DateTime? MembershipExpiry { get; set; }
     public string? QrToken { get; set; } // opaque access token encoded in the member QR

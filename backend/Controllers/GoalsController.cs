@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using StandUpFitness.Data;
 using StandUpFitness.Models;
+using StandUpFitness.Services;
 
 namespace StandUpFitness.Controllers;
 
@@ -18,18 +19,6 @@ public class GoalsController : ControllerBase
         _context = context;
     }
 
-    private bool IsStaffOrAbove() =>
-        User.IsInRole("Admin") || User.IsInRole("GymOwner") || User.IsInRole("Trainer") || User.IsInRole("Staff");
-
-    private async Task<bool> CanAccessClientAsync(int clientId)
-    {
-        if (IsStaffOrAbove()) return true;
-        var uid = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
-        if (!int.TryParse(uid, out var userId)) return false;
-        var own = await _context.Clients.Where(c => c.UserId == userId).Select(c => (int?)c.Id).FirstOrDefaultAsync();
-        return own == clientId;
-    }
-
     // GET: api/goals?clientId=5&status=in_progress
     [HttpGet]
     public async Task<IActionResult> GetGoals(
@@ -37,12 +26,19 @@ public class GoalsController : ControllerBase
         [FromQuery] string? status)
     {
         // A client may only list their own goals (and must scope by clientId).
-        if (clientId.HasValue) { if (!await CanAccessClientAsync(clientId.Value)) return Forbid(); }
-        else if (!IsStaffOrAbove()) return Forbid();
+        if (clientId.HasValue) { if (!await _context.CanAccessCoreClientAsync(User, clientId.Value)) return Forbid(); }
+        else if (!User.CanManageCoreScope(includeStaff: true) && !User.IsInRole("Trainer")) return Forbid();
 
         var query = _context.Goals
             .Include(g => g.Client)
             .AsQueryable();
+
+        if (!clientId.HasValue && User.IsInRole("Trainer") && !User.CanManageCoreScope(includeStaff: true))
+        {
+            var trainerId = await _context.CurrentCoreTrainerIdAsync(User);
+            if (trainerId == null) return Forbid();
+            query = query.Where(g => g.Client.TrainerId == trainerId || g.Client.Groups.Any(gr => gr.TrainerId == trainerId));
+        }
 
         if (clientId.HasValue)
             query = query.Where(g => g.ClientId == clientId);
@@ -95,6 +91,7 @@ public class GoalsController : ControllerBase
 
         if (goal == null)
             return NotFound();
+        if (!await _context.CanAccessCoreClientAsync(User, goal.ClientId)) return Forbid();
 
         return Ok(new
         {
@@ -118,7 +115,7 @@ public class GoalsController : ControllerBase
     [HttpPost("create")]
     public async Task<IActionResult> CreateGoal([FromBody] CreateGoalRequest request)
     {
-        if (!await CanAccessClientAsync(request.ClientId)) return Forbid();
+        if (!await _context.CanAccessCoreClientAsync(User, request.ClientId)) return Forbid();
 
         var client = await _context.Clients.FindAsync(request.ClientId);
         if (client == null)
@@ -157,6 +154,7 @@ public class GoalsController : ControllerBase
         var goal = await _context.Goals.FindAsync(id);
         if (goal == null)
             return NotFound();
+        if (!await _context.CanAccessCoreClientAsync(User, goal.ClientId)) return Forbid();
 
         goal.Title = request.Title ?? goal.Title;
         goal.Description = request.Description ?? goal.Description;
@@ -179,7 +177,7 @@ public class GoalsController : ControllerBase
         var goal = await _context.Goals.FindAsync(id);
         if (goal == null)
             return NotFound();
-        if (!await CanAccessClientAsync(goal.ClientId)) return Forbid();
+        if (!await _context.CanAccessCoreClientAsync(User, goal.ClientId)) return Forbid();
 
         goal.Status = "completed";
         goal.UpdatedAt = DateTime.UtcNow;
@@ -196,7 +194,7 @@ public class GoalsController : ControllerBase
         var goal = await _context.Goals.FindAsync(id);
         if (goal == null)
             return NotFound();
-        if (!await CanAccessClientAsync(goal.ClientId)) return Forbid();
+        if (!await _context.CanAccessCoreClientAsync(User, goal.ClientId)) return Forbid();
 
         goal.Status = "abandoned";
         goal.UpdatedAt = DateTime.UtcNow;
@@ -214,6 +212,7 @@ public class GoalsController : ControllerBase
         var goal = await _context.Goals.FindAsync(id);
         if (goal == null)
             return NotFound();
+        if (!await _context.CanAccessCoreClientAsync(User, goal.ClientId)) return Forbid();
 
         _context.Goals.Remove(goal);
         await _context.SaveChangesAsync();
@@ -225,7 +224,7 @@ public class GoalsController : ControllerBase
     [HttpGet("stats/{clientId}")]
     public async Task<IActionResult> GetGoalStats(int clientId)
     {
-        if (!await CanAccessClientAsync(clientId)) return Forbid();
+        if (!await _context.CanAccessCoreClientAsync(User, clientId)) return Forbid();
         var goals = await _context.Goals
             .Where(g => g.ClientId == clientId)
             .ToListAsync();

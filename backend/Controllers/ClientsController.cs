@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using StandUpFitness.Data;
 using StandUpFitness.Models;
+using StandUpFitness.Services;
 
 namespace StandUpFitness.Controllers;
 
@@ -17,6 +18,15 @@ public class ClientsController : ControllerBase
     public ClientsController(FitnessContext context)
     {
         _context = context;
+    }
+
+    private async Task<decimal> GetDiscountPercentAsync(string? key)
+    {
+        if (string.IsNullOrWhiteSpace(key))
+            return 0;
+        var discount = await _context.DiscountCategories
+            .FirstOrDefaultAsync(d => d.Key == key.Trim() && d.IsActive);
+        return discount?.DiscountPercent ?? 0m;
     }
 
     private async Task<string> NewQrTokenAsync()
@@ -34,8 +44,8 @@ public class ClientsController : ControllerBase
     [HttpGet("me")]
     public async Task<IActionResult> GetMyClientProfile()
     {
-        var userIdClaim = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier);
-        if (!int.TryParse(userIdClaim?.Value, out var userId))
+        var userId = User.CurrentUserId();
+        if (userId == null)
             return Unauthorized();
 
         var client = await _context.Clients
@@ -43,22 +53,28 @@ public class ClientsController : ControllerBase
             .Include(c => c.Trainer)
                 .ThenInclude(t => t!.User)
             .Include(c => c.Groups)
-            .FirstOrDefaultAsync(c => c.UserId == userId);
+            .FirstOrDefaultAsync(c => c.UserId == userId.Value);
 
         if (client == null)
         {
-            var user = await _context.Users.FindAsync(userId);
+            var user = await _context.Users.FindAsync(userId.Value);
             if (user == null) return NotFound();
+            if (user.Role != UserRole.Client) return Forbid();
             client = new Client
             {
-                UserId = userId,
+                UserId = userId.Value,
                 MembershipType = "standard",
+                DiscountCategory = "standard",
                 IsActive = true,
                 QrToken = await NewQrTokenAsync()
             };
             _context.Clients.Add(client);
             await _context.SaveChangesAsync();
             await _context.Entry(client).Reference(c => c.User).LoadAsync();
+        }
+        else if (client.User.Role != UserRole.Client)
+        {
+            return Forbid();
         }
         else if (string.IsNullOrWhiteSpace(client.QrToken))
         {
@@ -79,6 +95,7 @@ public class ClientsController : ControllerBase
             client.User.Name,
             client.User.Email,
             client.MembershipType,
+            client.DiscountCategory,
             client.MembershipExpiry,
             client.QrToken,
             client.IsActive,
@@ -120,6 +137,7 @@ public class ClientsController : ControllerBase
                 c.User.Name,
                 c.User.Email,
                 c.MembershipType,
+                c.DiscountCategory,
                 c.MembershipExpiry,
                 c.QrToken,
                 c.IsActive,
@@ -155,10 +173,14 @@ public class ClientsController : ControllerBase
             client.Id,
             client.User.Name,
             client.User.Email,
+            client.User.Phone,
             client.MembershipType,
+            client.DiscountCategory,
+            client.PlanId,
             client.MembershipExpiry,
             client.QrToken,
             client.IsActive,
+            client.TrainerId,
             Trainer = client.Trainer?.User.Name,
             client.StartDate,
             TotalCheckIns = attendance,
@@ -175,6 +197,8 @@ public class ClientsController : ControllerBase
         var email = request.Email.Trim().ToLowerInvariant();
         var name = request.Name.Trim();
         var membershipType = string.IsNullOrWhiteSpace(request.MembershipType) ? "standard" : request.MembershipType.Trim();
+        var discountCategory = string.IsNullOrWhiteSpace(request.DiscountCategory) ? "standard" : request.DiscountCategory.Trim().ToLowerInvariant();
+        var discountPercent = await GetDiscountPercentAsync(discountCategory);
         var userExists = await _context.Users.AnyAsync(u => u.Email == email);
         if (userExists)
             return BadRequest(new { message = "Email already exists" });
@@ -191,47 +215,63 @@ public class ClientsController : ControllerBase
         };
 
         var plan = await _context.MembershipPlans.FirstOrDefaultAsync(p => p.Name == membershipType);
+        // Çmimi i dërguar nga recepsioni është çmimi FINAL (UI e ka aplikuar tashmë
+        // zbritjen dhe stafi mund ta ketë ndryshuar me dorë — më parë injorohej në
+        // heshtje sapo ekzistonte pakoja dhe faturohej çmimi i rillogaritur).
+        // Pa çmim eksplicit: çmimi i pakos me zbritjen e kategorisë.
+        var discountedPrice = request.MembershipPrice
+            ?? (plan?.Price ?? 0m) * (1 - discountPercent / 100m);
+
+        // With a priced membership the expiry is applied when the invoice is PAID
+        // (InvoicePaymentService), not up front — otherwise paying the invoice later
+        // would extend the package a second time. An explicitly requested expiry
+        // still wins and suppresses the payment-time extension via the marker note.
+        var invoiced = discountedPrice > 0;
         var client = new Client
         {
             User = user,
             MembershipType = membershipType,
+            DiscountCategory = discountCategory,
             PlanId = plan?.Id,
-            MembershipExpiry = request.MembershipExpiry ?? (plan != null ? DateTime.UtcNow.AddDays(plan.DurationDays) : DateTime.UtcNow.AddMonths(1)),
+            MembershipExpiry = request.MembershipExpiry ??
+                (invoiced ? null : plan != null ? DateTime.UtcNow.AddDays(plan.DurationDays) : DateTime.UtcNow.AddMonths(1)),
             IsActive = true,
             QrToken = await NewQrTokenAsync()
         };
 
         _context.Users.Add(user);
         _context.Clients.Add(client);
-        await _context.SaveChangesAsync();
 
-        // Create invoice for membership
-        if (request.MembershipPrice > 0)
+        if (invoiced)
         {
-            var invoiceNumber = $"INV-{DateTime.UtcNow:yyyyMMdd}-{new Random().Next(1000, 9999)}";
             var invoice = new Invoice
             {
-                InvoiceNumber = invoiceNumber,
-                ClientId = client.Id,
+                InvoiceNumber = DocumentNumbers.Invoice(),
+                Client = client,
                 Description = $"{membershipType} membership",
-                Subtotal = request.MembershipPrice,
+                Subtotal = discountedPrice,
                 TaxAmount = 0,
-                TotalAmount = request.MembershipPrice,
+                TotalAmount = discountedPrice,
                 Status = "pending",
-                DueDate = DateTime.UtcNow
+                DueDate = DateTime.UtcNow,
+                // Expiry chosen by staff at creation → payment must not extend again.
+                Notes = request.MembershipExpiry.HasValue ? "[membership-applied]" : null
             };
 
             invoice.Items.Add(new InvoiceItem
             {
                 Description = $"{membershipType} membership",
                 Quantity = 1,
-                UnitPrice = request.MembershipPrice,
-                Total = request.MembershipPrice
+                UnitPrice = discountedPrice,
+                Total = discountedPrice
             });
 
             _context.Invoices.Add(invoice);
-            await _context.SaveChangesAsync();
         }
+
+        // Single SaveChanges: user + client + invoice commit atomically (no more
+        // half-created clients when the invoice insert failed).
+        await _context.SaveChangesAsync();
 
         return Ok(new { message = "Client created successfully", id = client.Id, qrToken = client.QrToken });
     }
@@ -250,22 +290,57 @@ public class ClientsController : ControllerBase
 
         if (!string.IsNullOrWhiteSpace(request.Name))
             client.User.Name = request.Name.Trim();
+
+        // Email: ndryshohet vetëm nëse dërgohet; duhet të mbetet unik ndër userat.
+        if (!string.IsNullOrWhiteSpace(request.Email))
+        {
+            var email = request.Email.Trim().ToLowerInvariant();
+            if (email != client.User.Email)
+            {
+                if (await _context.Users.AnyAsync(u => u.Email == email && u.Id != client.UserId))
+                    return BadRequest(new { message = "Ky email është i zënë nga një përdorues tjetër." });
+                client.User.Email = email;
+            }
+        }
+
+        // Telefoni: string bosh e pastron, null (i padërguar) e lë siç është.
+        if (request.Phone != null)
+            client.User.Phone = string.IsNullOrWhiteSpace(request.Phone) ? null : request.Phone.Trim();
+
+        // Reset i fjalëkalimit nga admini/recepsioni (fjalëkalim i përkohshëm).
+        if (!string.IsNullOrWhiteSpace(request.NewPassword))
+        {
+            if (request.NewPassword.Length < 8)
+                return BadRequest(new { message = "Fjalëkalimi duhet të ketë të paktën 8 karaktere." });
+            client.User.PasswordHash = BCrypt.Net.BCrypt.HashPassword(request.NewPassword);
+        }
+
         if (!string.IsNullOrWhiteSpace(request.MembershipType))
         {
             var membershipType = request.MembershipType.Trim();
             client.MembershipType = membershipType;
             client.PlanId = (await _context.MembershipPlans.FirstOrDefaultAsync(p => p.Name == membershipType))?.Id;
         }
+        if (!string.IsNullOrWhiteSpace(request.DiscountCategory))
+            client.DiscountCategory = request.DiscountCategory.Trim().ToLowerInvariant();
         if (request.MembershipExpiry.HasValue && request.MembershipExpiry.Value.Date < DateTime.UtcNow.Date)
             return BadRequest(new { message = "Membership expiry cannot be in the past" });
         client.MembershipExpiry = request.MembershipExpiry ?? client.MembershipExpiry;
         client.IsActive = request.IsActive ?? client.IsActive;
 
+        // TrainerId: 0 = hiqe trajnerin; vlerë tjetër = cakto; i padërguar = pa ndryshim.
         if (request.TrainerId.HasValue)
         {
-            var trainer = await _context.Trainers.FindAsync(request.TrainerId);
-            if (trainer == null) return BadRequest(new { message = "Trainer not found" });
-            client.TrainerId = request.TrainerId;
+            if (request.TrainerId.Value == 0)
+            {
+                client.TrainerId = null;
+            }
+            else
+            {
+                var trainer = await _context.Trainers.FindAsync(request.TrainerId);
+                if (trainer == null) return BadRequest(new { message = "Trainer not found" });
+                client.TrainerId = request.TrainerId;
+            }
         }
 
         client.UpdatedAt = DateTime.UtcNow;
@@ -299,10 +374,12 @@ public class ClientsController : ControllerBase
         month ??= DateTime.UtcNow.Month;
 
         var startDate = new DateTime(year.Value, month.Value, 1);
-        var endDate = startDate.AddMonths(1).AddDays(-1);
+        // Exclusive upper bound: "<= AddDays(-1)" cut off everything after
+        // midnight on the last day of the month.
+        var endDate = startDate.AddMonths(1);
 
         var rows = await _context.AttendanceLogs
-            .Where(al => al.ClientId == id && al.CheckInTime >= startDate && al.CheckInTime <= endDate)
+            .Where(al => al.ClientId == id && al.CheckInTime >= startDate && al.CheckInTime < endDate)
             .OrderByDescending(al => al.CheckInTime)
             .Select(al => new { al.Id, al.CheckInTime, al.CheckOutTime })
             .ToListAsync();
@@ -341,6 +418,13 @@ public class ClientsController : ControllerBase
 
         if (client.MembershipExpiry.HasValue && client.MembershipExpiry.Value < DateTime.UtcNow)
             return BadRequest("Client membership has expired");
+
+        // Double check-in guard: an open log would otherwise stack forever and
+        // inflate the live in-gym count.
+        var alreadyInside = await _context.AttendanceLogs
+            .AnyAsync(al => al.ClientId == id && al.CheckOutTime == null && al.Decision == "granted");
+        if (alreadyInside)
+            return BadRequest(new { message = "Client is already checked in — check them out first" });
 
         var log = new AttendanceLog
         {
@@ -382,15 +466,21 @@ public class CreateClientRequest
     [Required, EmailAddress, MaxLength(256)] public string Email { get; set; } = null!;
     [Required, MinLength(8), MaxLength(128)] public string Password { get; set; } = null!;
     [MaxLength(60)] public string? MembershipType { get; set; } = "standard";
+    [MaxLength(60)] public string? DiscountCategory { get; set; } = "standard";
     public DateTime? MembershipExpiry { get; set; }
-    [Range(0, 1_000_000)] public decimal MembershipPrice { get; set; } = 0;
+    // Null = llogarite nga pakoja + zbritja; vlerë (edhe 0) = çmim final i vendosur nga stafi.
+    [Range(0, 1_000_000)] public decimal? MembershipPrice { get; set; }
 }
 
 public class UpdateClientRequest
 {
     public string? Name { get; set; }
+    public string? Email { get; set; }
+    public string? Phone { get; set; }
+    public string? NewPassword { get; set; }
     public string? MembershipType { get; set; }
+    public string? DiscountCategory { get; set; }
     public DateTime? MembershipExpiry { get; set; }
     public bool? IsActive { get; set; }
-    public int? TrainerId { get; set; }
+    public int? TrainerId { get; set; } // 0 = hiqe trajnerin
 }

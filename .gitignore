@@ -8,6 +8,7 @@ backend/*.user
 # Frontend
 frontend/node_modules/
 frontend/dist/
+frontend/*.tsbuildinfo
 frontend/vite.config.ts.timestamp-*.mjs
 frontend/.env.local
 frontend/.env.production.local

@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using System.ComponentModel.DataAnnotations;
 using StandUpFitness.Data;
 using StandUpFitness.Models;
+using StandUpFitness.Services;
 
 namespace StandUpFitness.Controllers;
 
@@ -19,9 +20,27 @@ public class TrainerReportsController : ControllerBase
         _context = context;
     }
 
+    private async Task<bool> CanAccessReportAsync(TrainerWeeklyReport report)
+    {
+        if (User.CanManageCoreScope(permission: "reports.read")) return true;
+        var trainerId = await _context.CurrentCoreTrainerIdAsync(User);
+        return trainerId.HasValue &&
+            report.TrainerId == trainerId.Value &&
+            await _context.TrainerCanAccessClientAsync(User, report.ClientId);
+    }
+
     [HttpGet]
     public async Task<IActionResult> List([FromQuery] int? trainerId, [FromQuery] int? clientId)
     {
+        if (!User.CanManageCoreScope(permission: "reports.read"))
+        {
+            var ownTrainerId = await _context.CurrentCoreTrainerIdAsync(User);
+            if (ownTrainerId == null) return Forbid();
+            if (trainerId.HasValue && trainerId.Value != ownTrainerId.Value) return Forbid();
+            if (clientId.HasValue && !await _context.TrainerCanAccessClientAsync(User, clientId.Value)) return Forbid();
+            trainerId = ownTrainerId;
+        }
+
         var query = _context.TrainerWeeklyReports
             .Include(r => r.Trainer).ThenInclude(t => t.User)
             .Include(r => r.Client).ThenInclude(c => c.User)
@@ -60,6 +79,7 @@ public class TrainerReportsController : ControllerBase
             .FirstOrDefaultAsync(r => r.Id == id);
 
         if (report == null) return NotFound();
+        if (!await CanAccessReportAsync(report)) return Forbid();
         return Ok(Shape(report));
     }
 
@@ -70,6 +90,12 @@ public class TrainerReportsController : ControllerBase
             return BadRequest("Trainer not found");
         if (!await _context.Clients.AnyAsync(c => c.Id == request.ClientId))
             return BadRequest("Client not found");
+        if (!User.CanManageCoreScope(permission: "reports.read"))
+        {
+            var ownTrainerId = await _context.CurrentCoreTrainerIdAsync(User);
+            if (ownTrainerId == null || request.TrainerId != ownTrainerId.Value || !await _context.TrainerCanAccessClientAsync(User, request.ClientId))
+                return Forbid();
+        }
 
         var report = new TrainerWeeklyReport
         {
@@ -94,6 +120,7 @@ public class TrainerReportsController : ControllerBase
     {
         var report = await _context.TrainerWeeklyReports.FindAsync(id);
         if (report == null) return NotFound();
+        if (!await CanAccessReportAsync(report)) return Forbid();
         report.PdfFile = request.PdfFile;
         report.UpdatedAt = DateTime.UtcNow;
         await _context.SaveChangesAsync();
@@ -110,6 +137,7 @@ public class TrainerReportsController : ControllerBase
             .AsNoTracking()
             .FirstOrDefaultAsync(r => r.Id == id);
         if (report == null) return NotFound();
+        if (!await CanAccessReportAsync(report)) return Forbid();
         return Ok(new { message = "PDF data ready", report = Shape(report) });
     }
 

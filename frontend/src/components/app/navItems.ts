@@ -9,12 +9,10 @@ import {
   UserCog,
   BarChart3,
   Shield,
-  Wallet,
   Ticket,
   Computer,
   ScanLine,
   Receipt,
-  Building,
   Mail,
   Settings,
   UtensilsCrossed,
@@ -25,6 +23,7 @@ import {
   CreditCard,
   IdCard,
   Trophy,
+  Package,
   LogOut,
   Bell,
   Menu,
@@ -34,14 +33,45 @@ export interface NavItem {
   to: string
   label: string
   icon: LucideIcon
+  /** Rrugë shtesë që e mbajnë këtë item aktiv (p.sh. tabs brenda seksionit Financa). */
+  match?: string[]
 }
+
+/** Seksioni financiar i bashkuar — nën-faqet navigohen me tabs brenda faqes. */
+export const FINANCE_SECTION_PATHS = ['/admin/finance', '/admin/invoices', '/admin/payroll', '/admin/trainer-payments']
+
+/** Seksioni i çmimeve i bashkuar — Pakot + Zbritjet me tabs brenda faqes. */
+export const PRICING_SECTION_PATHS = ['/admin/plans', '/admin/discounts']
+
+/** Seksioni i ekipit i bashkuar — Trajnerët + Stafi + Qiragjinjtë me tabs brenda faqes. */
+export const TEAM_SECTION_PATHS = ['/admin/trainers', '/admin/staff', '/admin/rentals']
 
 const dashboard: NavItem = { to: '/dashboard', label: 'Dashboard', icon: Home }
 const messages: NavItem = { to: '/messages', label: 'Mesazhet', icon: Mail }
 const settings: NavItem = { to: '/settings', label: 'Cilësimet', icon: Settings }
 
-export function navForRole(role: UserRole | undefined): NavItem[] {
-  return [...roleNav(role), messages, settings]
+export function navForRole(role: UserRole | undefined, permissions: string[] = []): NavItem[] {
+  const items = [...roleNav(role)]
+  const add = (permission: string, item: NavItem, blockedRoles: UserRole[] = []) => {
+    if (blockedRoles.includes(role as UserRole)) return
+    if (!permissions.includes(permission) && !permissions.includes('system.admin')) return
+    if (!items.some((existing) => existing.to === item.to)) items.push(item)
+  }
+
+  add('clients.write', { to: '/admin/clients', label: 'Klientët', icon: Users }, ['client', 'tenant_client', 'trainer_tenant'])
+  add('finance.read', { to: '/admin/finance', label: 'Financat', icon: Banknote, match: FINANCE_SECTION_PATHS }, ['client', 'tenant_client', 'trainer_tenant'])
+  add('finance.write', { to: '/admin/cash-register', label: 'Arka / POS', icon: Computer }, ['client', 'tenant_client', 'trainer_tenant'])
+  // Faturat mbeten entry më vete vetëm për rolet pa qasje në /admin/finance (staff, cashier, role dinamike);
+  // admin/gym_owner i hapin nga tabs e seksionit Financa.
+  add('finance.write', { to: '/admin/invoices', label: 'Faturat', icon: Receipt }, ['admin', 'gym_owner', 'client', 'tenant_client', 'trainer_tenant'])
+  add('access.scan', { to: '/arka/access', label: 'Qasja (QR)', icon: ScanLine }, ['client', 'tenant_client', 'trainer_tenant'])
+  add('trainers.write', { to: '/admin/trainers', label: 'Trajnerët', icon: Dumbbell }, ['client', 'tenant_client', 'trainer_tenant'])
+  // Stafi mbetet entry më vete vetëm për rolet dinamike; admin/gym_owner e hapin nga tabs e seksionit Ekipi.
+  add('staff.write', { to: '/admin/staff', label: 'Stafi', icon: UserCog }, ['admin', 'gym_owner', 'client', 'tenant_client', 'trainer_tenant'])
+  add('reports.read', { to: '/admin/reports', label: 'Raporte', icon: BarChart3 }, ['trainer', 'client', 'tenant_client', 'trainer_tenant'])
+  add('roles.manage', { to: '/admin/roles', label: 'Rolet', icon: Shield }, ['client', 'tenant_client', 'trainer_tenant'])
+
+  return [...items, messages, settings]
 }
 
 function roleNav(role: UserRole | undefined): NavItem[] {
@@ -52,19 +82,18 @@ function roleNav(role: UserRole | undefined): NavItem[] {
         dashboard,
         { to: '/admin/calendar', label: 'Kalendari', icon: CalendarDays },
         { to: '/admin/groups', label: 'Grupet', icon: Users2 },
-        { to: '/admin/finance', label: 'Financat', icon: Banknote },
+        // Financat bashkon: Përmbledhjen, Faturat, Rrogat (Payroll) dhe Pagesat e Trajnerëve (tabs brenda faqes)
+        { to: '/admin/finance', label: 'Financat', icon: Banknote, match: FINANCE_SECTION_PATHS },
         { to: '/admin/clients', label: 'Klientët', icon: Users },
-        { to: '/admin/trainers', label: 'Trajnerët', icon: Dumbbell },
-        { to: '/admin/staff', label: 'Stafi', icon: UserCog },
+        // Ekipi bashkon: Trajnerët + Stafin + Qiragjinjtë (tabs brenda faqes)
+        { to: '/admin/trainers', label: 'Ekipi', icon: UserCog, match: TEAM_SECTION_PATHS },
         { to: '/admin/reports', label: 'Raporte', icon: BarChart3 },
         { to: '/admin/roles', label: 'Rolet', icon: Shield },
-        { to: '/admin/payroll', label: 'Payroll', icon: Wallet },
-        { to: '/admin/trainer-payments', label: 'Pagesat e Trajnerëve', icon: Banknote },
-        { to: '/admin/plans', label: 'Pakot', icon: Ticket },
+        // Pakot bashkon: Pakot e Anëtarësimit + Zbritjet (tabs brenda faqes)
+        { to: '/admin/plans', label: 'Pakot & Zbritjet', icon: Ticket, match: PRICING_SECTION_PATHS },
         { to: '/admin/cash-register', label: 'Arka', icon: Computer },
+        { to: '/admin/inventory', label: 'Inventari', icon: Package },
         { to: '/arka/access', label: 'Qasja (QR)', icon: ScanLine },
-        { to: '/admin/invoices', label: 'Faturat', icon: Receipt },
-        { to: '/admin/rentals', label: 'Qiragjinjtë', icon: Building },
       ]
     case 'trainer':
       return [
@@ -101,7 +130,6 @@ function roleNav(role: UserRole | undefined): NavItem[] {
       return [
         dashboard,
         { to: '/calendar', label: 'Orari im', icon: CalendarDays },
-        { to: '/workouts', label: 'Plani im', icon: Dumbbell },
         { to: '/nutrition', label: 'Ushqimi', icon: Apple },
       ]
     case 'client':
@@ -137,7 +165,9 @@ export function titleForPath(pathname: string): string {
     '/admin/payroll': 'Payroll',
     '/admin/trainer-payments': 'Pagesat e Trajnerëve',
     '/admin/plans': 'Pakot e Anëtarësimit',
+    '/admin/discounts': 'Zbritjet',
     '/admin/cash-register': 'Arka',
+    '/admin/inventory': 'Inventari',
     '/arka/access': 'Qasja me QR',
     '/admin/invoices': 'Faturat',
     '/admin/rentals': 'Qiragjinjtë',

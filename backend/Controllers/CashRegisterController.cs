@@ -3,12 +3,13 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using StandUpFitness.Data;
 using StandUpFitness.Models;
+using StandUpFitness.Services;
 
 namespace StandUpFitness.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
-[Authorize(Policy = "AdminStaff")]
+[Authorize(Policy = "Desk")]
 public class CashRegisterController : ControllerBase
 {
     private readonly FitnessContext _context;
@@ -21,15 +22,15 @@ public class CashRegisterController : ControllerBase
     // Resolve the current user to a Staff row, creating one on first use.
     private async Task<int?> GetOrCreateStaffIdAsync()
     {
-        var userIdClaim = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier);
-        if (!int.TryParse(userIdClaim?.Value, out var userId)) return null;
+        var userId = User.CurrentUserId();
+        if (userId == null) return null;
 
-        var staff = await _context.Staff.FirstOrDefaultAsync(s => s.UserId == userId);
+        var staff = await _context.Staff.FirstOrDefaultAsync(s => s.UserId == userId.Value);
         if (staff == null)
         {
-            var user = await _context.Users.FindAsync(userId);
+            var user = await _context.Users.FindAsync(userId.Value);
             if (user == null) return null;
-            staff = new Staff { UserId = userId, Position = "staff", IsActive = true };
+            staff = new Staff { UserId = userId.Value, Position = "staff", IsActive = true };
             _context.Staff.Add(staff);
             await _context.SaveChangesAsync();
         }
@@ -37,17 +38,23 @@ public class CashRegisterController : ControllerBase
     }
 
     // GET: api/cashregister/current
+    // "Current" = the most recently opened register that is still open, regardless of
+    // calendar date. The old UTC-date filter (OpenedAt.Date == today) made a register
+    // opened yesterday evening (gym-local) invisible after UTC midnight: /current
+    // returned 404 while the register stayed open forever, and a second one could be
+    // opened on top of it. An open register is current until it is explicitly closed.
     [HttpGet("current")]
     public async Task<IActionResult> GetCurrentRegister()
     {
-        var today = DateTime.UtcNow.Date;
         var register = await _context.CashRegisters
             .Include(cr => cr.Staff)
                 .ThenInclude(s => s.User)
-            .FirstOrDefaultAsync(cr => cr.Status == "open" && cr.OpenedAt.Date == today);
+            .Where(cr => cr.Status == "open")
+            .OrderByDescending(cr => cr.OpenedAt)
+            .FirstOrDefaultAsync();
 
         if (register == null)
-            return NotFound(new { message = "No open register for today" });
+            return NotFound(new { message = "No open register" });
 
         return Ok(new
         {
@@ -69,12 +76,13 @@ public class CashRegisterController : ControllerBase
         if (staffId == null)
             return Unauthorized();
 
-        var today = DateTime.UtcNow.Date;
+        // One open register at a time for the whole desk (FinanceService links cash
+        // movements to "the open register", so two open at once would split totals).
         var existingOpen = await _context.CashRegisters
-            .FirstOrDefaultAsync(cr => cr.Status == "open" && cr.OpenedAt.Date == today && cr.StaffId == staffId.Value);
+            .FirstOrDefaultAsync(cr => cr.Status == "open");
 
         if (existingOpen != null)
-            return BadRequest("Register already open for today");
+            return BadRequest(new { message = "Ka tashmë një arkë të hapur — mbylle atë para se të hapësh një të re." });
 
         var register = new CashRegister
         {

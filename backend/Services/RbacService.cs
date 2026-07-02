@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Memory;
 using System.Security.Claims;
 using StandUpFitness.Data;
 using StandUpFitness.Models;
@@ -33,7 +34,7 @@ public static class RbacCatalog
         ["Staff"] = new[] { "clients.read", "clients.write", "finance.write", "access.scan" },
         ["Cashier"] = new[] { "clients.read", "clients.write", "finance.write", "access.scan" },
         ["Trainer"] = new[] { "clients.read", "schedule.write", "nutrition.write", "workouts.write", "reports.read" },
-        ["TrainerTenant"] = new[] { "rental.manage", "nutrition.write", "workouts.write", "reports.read" },
+        ["TrainerTenant"] = new[] { "rental.manage" },
         ["Client"] = Array.Empty<string>(),
         ["TenantClient"] = Array.Empty<string>()
     };
@@ -54,11 +55,20 @@ public static class RbacCatalog
 
 public class PermissionClaimsTransformation : IClaimsTransformation
 {
-    private readonly FitnessContext _context;
+    // Dynamic permissions used to be re-queried from the DB on EVERY authenticated
+    // request (hot-path roundtrip). They are now cached per user for a short TTL;
+    // RolesController evicts the entry on assign/unassign so those changes apply
+    // immediately, and role-permission edits propagate within the TTL.
+    public const string CacheKeyPrefix = "user-dynamic-perms:";
+    private static readonly TimeSpan CacheTtl = TimeSpan.FromSeconds(60);
 
-    public PermissionClaimsTransformation(FitnessContext context)
+    private readonly FitnessContext _context;
+    private readonly IMemoryCache _cache;
+
+    public PermissionClaimsTransformation(FitnessContext context, IMemoryCache cache)
     {
         _context = context;
+        _cache = cache;
     }
 
     public async Task<ClaimsPrincipal> TransformAsync(ClaimsPrincipal principal)
@@ -80,12 +90,18 @@ public class PermissionClaimsTransformation : IClaimsTransformation
         var userIdClaim = principal.FindFirst(ClaimTypes.NameIdentifier)?.Value;
         if (int.TryParse(userIdClaim, out var userId))
         {
-            var dynamicPermissions = await _context.UserRoleAssignments
-                .Where(ur => ur.UserId == userId && ur.DynamicRole.IsActive)
-                .SelectMany(ur => ur.DynamicRole.Permissions.Select(rp => rp.Permission.Key))
-                .Distinct()
-                .ToListAsync();
-            foreach (var key in dynamicPermissions) permissions.Add(key);
+            var dynamicPermissions = await _cache.GetOrCreateAsync(
+                $"{CacheKeyPrefix}{userId}",
+                async entry =>
+                {
+                    entry.AbsoluteExpirationRelativeToNow = CacheTtl;
+                    return await _context.UserRoleAssignments
+                        .Where(ur => ur.UserId == userId && ur.DynamicRole.IsActive)
+                        .SelectMany(ur => ur.DynamicRole.Permissions.Select(rp => rp.Permission.Key))
+                        .Distinct()
+                        .ToListAsync();
+                });
+            foreach (var key in dynamicPermissions ?? new List<string>()) permissions.Add(key);
         }
 
         foreach (var permission in permissions)

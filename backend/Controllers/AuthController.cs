@@ -9,6 +9,7 @@ using System.Security.Cryptography;
 using System.Text;
 using StandUpFitness.Data;
 using StandUpFitness.Models;
+using StandUpFitness.Services;
 
 namespace StandUpFitness.Controllers;
 
@@ -124,11 +125,11 @@ public class AuthController : ControllerBase
     [HttpPost("logout-all")]
     public async Task<IActionResult> LogoutAll()
     {
-        var userIdClaim = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier);
-        if (!int.TryParse(userIdClaim?.Value, out var userId))
+        var userId = User.CurrentUserId();
+        if (userId == null)
             return Unauthorized();
 
-        var tokens = await _context.RefreshTokens.Where(r => r.UserId == userId && r.RevokedAt == null).ToListAsync();
+        var tokens = await _context.RefreshTokens.Where(r => r.UserId == userId.Value && r.RevokedAt == null).ToListAsync();
         foreach (var t in tokens) t.RevokedAt = DateTime.UtcNow;
         await _context.SaveChangesAsync();
         return Ok(new { message = "All sessions revoked", count = tokens.Count });
@@ -141,50 +142,69 @@ public class AuthController : ControllerBase
         var days = int.TryParse(_configuration["JwtSettings:RefreshTokenDays"], out var d) ? d : 7;
         _context.RefreshTokens.Add(new RefreshToken { UserId = user.Id, Token = HashRefreshToken(raw), ExpiresAt = DateTime.UtcNow.AddDays(days) });
         await _context.SaveChangesAsync();
+        var permissions = await EffectivePermissionsAsync(user);
 
         return new
         {
             message,
-            user = new { id = user.Id, email = user.Email, name = user.Name, role = user.Role.ToString() },
+            user = new { id = user.Id, email = user.Email, name = user.Name, role = user.Role.ToString(), permissions },
             token = accessToken,
             refreshToken = raw
         };
+    }
+
+    private async Task<string[]> EffectivePermissionsAsync(User user)
+    {
+        var keys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        if (RbacCatalog.BaselinePermissions.TryGetValue(user.Role.ToString(), out var baseline))
+        {
+            foreach (var key in baseline) keys.Add(key);
+        }
+
+        var dynamicKeys = await _context.UserRoleAssignments
+            .Where(ur => ur.UserId == user.Id && ur.DynamicRole.IsActive)
+            .SelectMany(ur => ur.DynamicRole.Permissions.Select(rp => rp.Permission.Key))
+            .Distinct()
+            .ToListAsync();
+        foreach (var key in dynamicKeys) keys.Add(key);
+
+        return keys.OrderBy(k => k).ToArray();
     }
 
     [Authorize]
     [HttpGet("me")]
     public async Task<IActionResult> GetCurrentUser()
     {
-        var userIdClaim = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier);
-        if (!int.TryParse(userIdClaim?.Value, out var userId))
+        var userId = User.CurrentUserId();
+        if (userId == null)
         {
             return Unauthorized();
         }
 
-        var user = await _context.Users.FindAsync(userId);
+        var user = await _context.Users.FindAsync(userId.Value);
         if (user == null)
         {
             return NotFound();
         }
 
-        return Ok(new { id = user.Id, email = user.Email, name = user.Name, role = user.Role.ToString() });
+        return Ok(new { id = user.Id, email = user.Email, name = user.Name, role = user.Role.ToString(), permissions = await EffectivePermissionsAsync(user) });
     }
 
     [Authorize]
     [HttpPut("profile")]
     public async Task<IActionResult> UpdateProfile([FromBody] UpdateProfileRequest request)
     {
-        var userIdClaim = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier);
-        if (!int.TryParse(userIdClaim?.Value, out var userId))
+        var userId = User.CurrentUserId();
+        if (userId == null)
             return Unauthorized();
 
-        var user = await _context.Users.FindAsync(userId);
+        var user = await _context.Users.FindAsync(userId.Value);
         if (user == null) return NotFound();
 
         var email = request.Email?.Trim().ToLowerInvariant();
         if (!string.IsNullOrWhiteSpace(email) && email != user.Email)
         {
-            if (await _context.Users.AnyAsync(u => u.Email == email && u.Id != userId))
+            if (await _context.Users.AnyAsync(u => u.Email == email && u.Id != userId.Value))
                 return BadRequest(new { message = "Email already exists" });
             user.Email = email;
         }
@@ -192,25 +212,25 @@ public class AuthController : ControllerBase
             user.Name = request.Name.Trim();
 
         await _context.SaveChangesAsync();
-        return Ok(new { id = user.Id, email = user.Email, name = user.Name, role = user.Role.ToString() });
+        return Ok(new { id = user.Id, email = user.Email, name = user.Name, role = user.Role.ToString(), permissions = await EffectivePermissionsAsync(user) });
     }
 
     [Authorize]
     [HttpPost("change-password")]
     public async Task<IActionResult> ChangePassword([FromBody] ChangePasswordRequest request)
     {
-        var userIdClaim = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier);
-        if (!int.TryParse(userIdClaim?.Value, out var userId))
+        var userId = User.CurrentUserId();
+        if (userId == null)
             return Unauthorized();
 
-        var user = await _context.Users.FindAsync(userId);
+        var user = await _context.Users.FindAsync(userId.Value);
         if (user == null) return NotFound();
 
         if (!BCrypt.Net.BCrypt.Verify(request.CurrentPassword, user.PasswordHash))
             return BadRequest(new { message = "Fjalëkalimi aktual është gabim" });
 
         user.PasswordHash = BCrypt.Net.BCrypt.HashPassword(request.NewPassword);
-        var activeTokens = await _context.RefreshTokens.Where(r => r.UserId == userId && r.RevokedAt == null).ToListAsync();
+        var activeTokens = await _context.RefreshTokens.Where(r => r.UserId == userId.Value && r.RevokedAt == null).ToListAsync();
         foreach (var token in activeTokens)
             token.RevokedAt = DateTime.UtcNow;
         await _context.SaveChangesAsync();

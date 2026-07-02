@@ -467,7 +467,7 @@ export default function AdminGroups() {
             </Field>
 
             <div>
-              <div className="mb-2 flex items-center justify-between">
+              <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
                 <label className="text-sm font-medium text-gray-700">Orari javor (përsëritet çdo javë)</label>
                 <Button type="button" size="sm" variant="outline" onClick={addSlotRow}>
                   <Plus className="mr-1 h-4 w-4" /> Terminë
@@ -475,7 +475,7 @@ export default function AdminGroups() {
               </div>
               <div className="space-y-2">
                 {form.slots.map((s, i) => (
-                  <div key={i} className="grid grid-cols-[1fr_auto_auto_auto] items-center gap-2 rounded-lg border border-gray-200 p-2">
+                  <div key={i} className="grid grid-cols-1 items-center gap-2 rounded-lg border border-gray-200 p-2 sm:grid-cols-[1fr_auto_auto_auto]">
                     <select value={s.dayOfWeek} onChange={(e) => changeSlot(i, 'dayOfWeek', e.target.value)} className={fieldCls}>
                       {DAYS.map((d) => <option key={d} value={d}>{DAY_AL[d]}</option>)}
                     </select>

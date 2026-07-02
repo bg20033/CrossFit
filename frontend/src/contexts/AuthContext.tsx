@@ -22,6 +22,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const applyUser = async (raw: User) => {
     const normalized = { ...raw, role: normalizeRole(raw.role) as UserRole }
+    let permissions = Array.isArray(normalized.permissions) ? normalized.permissions : []
+    try {
+      permissions = await api.getPermissions()
+    } catch {
+      // /auth/me already includes permissions on supported backends; keep those.
+    }
     
     let pid: number | null = null
     try {
@@ -36,7 +42,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // Profile-specific screens can still load without a profile id; avoid noisy dev-console errors.
     }
     
-    setUser(normalized, pid)
+    setUser({ ...normalized, permissions }, pid)
   }
 
   useEffect(() => {

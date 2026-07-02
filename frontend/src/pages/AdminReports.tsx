@@ -39,6 +39,9 @@ const RANGE_LABELS: Record<Range, string> = {
 
 /* ──────────────────── empty report fallbacks ──────────────────── */
 
+// Palete për segmentet e donut-it të mënyrave të pagesës (rrotullohet sipas nevojës).
+const PM_COLORS = ['#EE3A24', '#F97316', '#3B82F6', '#10B981', '#8B5CF6', '#6E665C']
+
 function generateRevenueData(rangeDays: number) {
   const months = rangeDays <= 30 ? 1 : rangeDays <= 90 ? 3 : rangeDays <= 180 ? 6 : 12
   const monthLabels = ['Jan', 'Shk', 'Mar', 'Pri', 'Maj', 'Qer', 'Korr', 'Gush', 'Sht', 'Tet', 'Nën', 'Dhj']
@@ -355,16 +358,17 @@ export default function AdminReports() {
             </Panel>
 
             <Panel title="Mënyra e pagesës">
+              {/* Backend-i kthen vetëm metodat me të dhëna (numër i ndryshueshëm) —
+                  segmentet ndërtohen dinamikisht, jo me indekse fikse [0..3]. */}
               <DonutChart
-                segments={[
-                  { label: 'Kartelë', value: revenue.paymentMethods[0].value, color: '#EE3A24' },
-                  { label: 'Cash', value: revenue.paymentMethods[1].value, color: '#F97316' },
-                  { label: 'Bankë', value: revenue.paymentMethods[2].value, color: '#3B82F6' },
-                  { label: 'Online', value: revenue.paymentMethods[3].value, color: '#10B981' },
-                ]}
+                segments={(revenue.paymentMethods ?? []).map((pm, i) => ({
+                  label: pm.label,
+                  value: pm.value,
+                  color: PM_COLORS[i % PM_COLORS.length],
+                }))}
               />
               <div className="mt-4 space-y-2">
-                {revenue.paymentMethods.map((pm) => (
+                {(revenue.paymentMethods ?? []).map((pm) => (
                   <div key={pm.label} className="flex items-center justify-between rounded-lg bg-gray-50 px-3 py-2">
                     <span className="text-sm text-gray-600">{pm.label}</span>
                     <span className="text-sm font-semibold text-gray-900">{eur(pm.value)}</span>

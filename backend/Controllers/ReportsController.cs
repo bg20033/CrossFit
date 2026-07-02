@@ -7,7 +7,7 @@ namespace StandUpFitness.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
-[Authorize(Policy = "AdminOnly")]
+[Authorize(Policy = "ReportsRead")]
 public class ReportsController : ControllerBase
 {
     private readonly FitnessContext _context;
@@ -34,9 +34,19 @@ public class ReportsController : ControllerBase
         var attendanceLogs = await _context.AttendanceLogs
             .Where(a => a.CheckInTime >= from && a.CheckInTime <= now)
             .ToListAsync();
+        // Projection instead of loading full Client+User entities — this report
+        // pulled every column of every client (incl. deleted) into memory.
         var clients = await _context.Clients
             .IgnoreQueryFilters()
-            .Include(c => c.User)
+            .Select(c => new
+            {
+                c.IsDeleted,
+                c.IsActive,
+                c.CreatedAt,
+                c.MembershipExpiry,
+                c.MembershipType,
+                Name = c.User.Name
+            })
             .ToListAsync();
         var groups = await _context.TrainingGroups
             .Include(g => g.Clients)
@@ -78,8 +88,10 @@ public class ReportsController : ControllerBase
 
         var byDate = attendanceLogs
             .GroupBy(a => a.CheckInTime.Date)
+            // Order chronologically by the date itself — sorting the "dd/MM"
+            // label put 01/07 before 15/06 whenever the range crossed months.
+            .OrderBy(g => g.Key)
             .Select(g => new { label = g.Key.ToString("dd/MM"), value = g.Count() })
-            .OrderBy(x => x.label)
             .ToList();
         var trends = byDate.Count > 0 ? byDate : LastWeekLabels().Select(l => new { label = l, value = 0 }).ToList();
 
@@ -103,7 +115,7 @@ public class ReportsController : ControllerBase
             .Where(c => !c.IsDeleted && c.MembershipExpiry.HasValue)
             .Select(c => new
             {
-                c.User.Name,
+                c.Name,
                 plan = c.MembershipType,
                 days = (int)Math.Ceiling((c.MembershipExpiry!.Value.Date - now.Date).TotalDays)
             })
