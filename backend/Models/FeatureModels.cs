@@ -14,16 +14,17 @@ public class ProgressPhoto
     public Client Client { get; set; } = null!;
 }
 
-/// <summary>A logged benchmark/lift result for the leaderboard + PR tracker.</summary>
+/// <summary>A logged lift result for the leaderboard + PR tracker (weight × reps).</summary>
 public class PersonalRecord
 {
     public int Id { get; set; }
     public int UserId { get; set; }
-    public string Benchmark { get; set; } = string.Empty; // fran, grace, backsquat...
-    public decimal Value { get; set; } // seconds | kg | reps (by benchmark type)
-    public DateTime Date { get; set; } = DateTime.UtcNow;
+    public string Benchmark { get; set; } = string.Empty; // back-squat, deadlift, pull-ups...
+    public decimal Value { get; set; } // pesha në kg (0 = trup i lirë, p.sh. pull-ups pa peshë shtesë)
+    public int Reps { get; set; } = 1; // përsëritjet me atë peshë
+    public DateTime Date { get; set; } = DateTime.UtcNow; // dita kur u krye
     public string? Note { get; set; }
-    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow; // koha kur u regjistrua
 
     public User User { get; set; } = null!;
 }

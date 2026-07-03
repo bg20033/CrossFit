@@ -14,14 +14,15 @@ import api from '../utils/api'
 const img = (id: string, w = 700) =>
   `url('https://images.unsplash.com/${id}?auto=format&fit=crop&w=${w}&q=80')`
 
-// TODO: zëvendëso fotot Unsplash me fotot reale të sallës dhe trajnerëve.
+// TODO: zëvendëso fotot Unsplash me fotot reale të sallës.
+// Klasat e sallës — vetëm këto gjashtë (kërkesë e pronarit 2026-07-03).
 const programs = [
-  { name: 'Themelet', tag: 'Fillo këtu', desc: 'On-ramp me katër seanca që t’i mëson lëvizjet bazë me ritmin tënd, para se t’i bashkohesh klasës në grup.', bg: img('photo-1517838277536-f5f99be501cd') },
-  { name: 'WOD në Grup', tag: 'Çdo ditë', desc: 'Zemra e palestrës. Stërvitja e ditës e udhëhequr nga trajneri, e shkallëzuar për çdo nivel në sallë.', bg: img('photo-1534438327276-14e5300c3a48') },
-  { name: 'Ngritje Olimpike', tag: 'Forcë', desc: 'Teknikë e dedikuar me shtangë — snatch, clean & jerk — me trajnim praktik dhe analizë me video.', bg: img('photo-1526401485004-46910ecc8e51') },
-  { name: 'Kondicion', tag: 'Metcon', desc: 'Punë intensive për motorin: rrema, vrapim dhe intervale me peshë trupore për të ndërtuar kapacitet.', bg: img('photo-1554284126-aa88f22d8b74') },
-  { name: 'Salla e Hapur', tag: 'Fleksibël', desc: 'Eja sipas orarit tënd për të punuar aftësi e aksesore, ose për të zëvendësuar një seancë të humbur.', bg: img('photo-1599058917212-d750089bc07e') },
-  { name: 'Trajnim Personal', tag: '1-me-1', desc: 'Seanca private të përshtatura për qëllimet e tua — nga pull-up-i i parë deri te podiumi i garave.', bg: img('photo-1571019613454-1cb2f99b2d8b') },
+  { name: 'Calisthenics', tag: 'Peshë trupore', desc: 'Kontroll dhe forcë me peshën e trupit — nga lëvizjet bazë deri te elementet e avancuara si muscle-up dhe handstand.', bg: img('photo-1571019613454-1cb2f99b2d8b') },
+  { name: 'Aerobik', tag: 'Kardio', desc: 'Punë intensive kardiovaskulare për të ndërtuar kapacitet dhe për të djegur yndyrë — energji dhe ritëm në çdo seancë.', bg: img('photo-1554284126-aa88f22d8b74') },
+  { name: 'Ngritje Olimpike', tag: 'Teknikë', desc: 'Teknikë e dedikuar me shtangë — snatch, clean & jerk — me trajnim praktik dhe korrigjim të lëvizjes.', bg: img('photo-1526401485004-46910ecc8e51') },
+  { name: 'Forcë', tag: 'Strength', desc: 'Ndërtim force me lëvizje bazë — squat, bench, deadlift — me progresion të matshëm javë pas jave.', bg: img('photo-1534438327276-14e5300c3a48') },
+  { name: 'Qëndrueshmëri', tag: 'Endurance', desc: 'Kapacitet dhe rezistencë për seanca të gjata — punë e vazhdueshme që e ngren kufirin tënd.', bg: img('photo-1517838277536-f5f99be501cd') },
+  { name: 'Balancë', tag: 'Ekuilibër & mobilitet', desc: 'Kontroll trupor, stabilitet dhe mobilitet — themeli që i mban të gjitha lëvizjet e tjera të sigurta.', bg: img('photo-1599058917212-d750089bc07e') },
 ]
 
 const coaches = [
@@ -37,48 +38,39 @@ const coaches = [
   { name: 'Camila Duarte', role: 'Trajnere', tag: 'Kettlebell & core', bg: img('photo-1517963879433-6ad2b056d712') },
 ]
 
-const days = ['Hën', 'Mar', 'Mër', 'Enj', 'Pre', 'Sht'] as const
-type Day = (typeof days)[number]
-
-const weekdayClasses = [
-  { time: '06:00', name: 'WOD i Agimit', coach: 'Marcus', level: 'Të gjitha nivelet' },
-  { time: '09:30', name: 'WOD në Grup', coach: 'Jesse', level: 'Të gjitha nivelet' },
-  { time: '12:00', name: 'Metcon i Drekës', coach: 'Theo', level: 'I mesëm' },
-  { time: '16:30', name: 'Ngritje Olimpike', coach: 'Sam', level: 'I hapur' },
-  { time: '18:00', name: 'WOD në Grup', coach: 'Dana', level: 'Të gjitha nivelet' },
-  { time: '19:15', name: 'Themelet', coach: 'Priya', level: 'Fillestar' },
-]
-const saturdayClasses = [
-  { time: '08:00', name: 'WOD në Çift', coach: 'Camila', level: 'Të gjitha nivelet' },
-  { time: '09:30', name: 'Klasa e Komunitetit', coach: 'Nathan', level: 'Të gjitha nivelet' },
-  { time: '11:00', name: 'Aftësi & Mobilitet', coach: 'Lena', level: 'I hapur' },
+// Orari javor — gjenerik Hën–Sht (të njëjtat blloqe çdo ditë) derisa admini të
+// konfigurojë grupet reale te sistemi; ai orar i saktë del te aplikacioni i klientit.
+const scheduleDays = 'E Hënë – E Shtunë'
+const scheduleBlocks = [
+  { time: '06:00 – 08:00', name: 'WOD i Mëngjesit', level: 'Të gjitha nivelet' },
+  { time: '09:00 – 11:00', name: 'Forcë & Ngritje Olimpike', level: 'I hapur' },
+  { time: '17:00 – 19:00', name: 'Calisthenics & Balancë', level: 'Të gjitha nivelet' },
+  { time: '19:00 – 21:00', name: 'Aerobik & Qëndrueshmëri', level: 'Të gjitha nivelet' },
 ]
 
-// Çmimet placeholder — lidhen me planet reale të anëtarësisë më vonë.
+// Planet — 3 pakot bazë (kërkesë e pronarit 2026-07-03). Këto janë fallback;
+// nëse admini i shton si Pakot reale te /admin/plans, faqja i merr live nga API.
 const plans = [
   {
-    name: 'Komuniteti',
-    blurb: 'Dy klasa në javë — perfekte për të ndërtuar shprehinë.',
-    monthly: 119,
-    annual: 101,
+    name: 'Bazik',
+    blurb: 'Qasje e plotë në klasa grupi — fillo me themelet.',
+    monthly: 70,
     popular: false,
-    features: ['2 klasa grupi / javë', 'Qasje e plotë në aplikacion', 'Qasje në sallën e hapur', 'Konsultë hyrëse falas'],
+    features: ['Klasa grupi pa limit', 'Qasje e plotë në aplikacion', 'Tracking i progresit & qëllimeve', 'Qasje me QR dhe orari i grupit tënd'],
   },
   {
-    name: 'Pa Limit',
-    blurb: 'Çdo klasë, çdo ditë. Plani ynë më i popullarizuar.',
-    monthly: 169,
-    annual: 144,
+    name: 'Pro',
+    blurb: 'Gjithçka nga Bazik, plus plan nutricioni i personalizuar.',
+    monthly: 100,
     popular: true,
-    features: ['Klasa grupi pa limit', 'Ngritje olimpike & metcon', 'Udhëzime për ushqyerjen', 'Salla e hapur + seanca aftësish', 'Evente për anëtarët'],
+    features: ['Gjithçka nga Bazik', 'Plan nutricioni i personalizuar', 'Ndjekje mujore e planit nga trajneri', 'Raporte javore progresi'],
   },
   {
-    name: 'Pa Limit + Trajnim',
-    blurb: 'Gjithçka, plus trajnim 1-me-1 çdo muaj.',
-    monthly: 259,
-    annual: 220,
+    name: 'Personal Trainer',
+    blurb: 'Gjithçka nga Pro, plus trajnim personal 1-me-1.',
+    monthly: 250,
     popular: false,
-    features: ['Gjithçka nga Pa Limit', '2 seanca private / muaj', 'Program i personalizuar', 'Prioritet në rezervime'],
+    features: ['Gjithçka nga Pro', 'Seanca trajnimi personal 1-me-1', 'Program i skicuar vetëm për ty', 'Prioritet në rezervime'],
   },
 ]
 
@@ -121,8 +113,27 @@ const coachImgIds = [
   'photo-1517963879433-6ad2b056d712',
 ]
 
-interface PublicTrainer { id: number; name: string; specialization: string | null; trainerType: string | null }
+interface PublicTrainer {
+  id: number
+  name: string
+  specialization: string | null
+  trainerType: string | null
+  photoUrl: string | null
+  title: string | null
+  bio: string | null
+  workExperience: string | null
+  certifications: string | null
+  trainings: string | null
+}
 interface PublicPlan { id: number; name: string; description: string | null; price: number; durationDays: number; sessionsTotal: number | null; planType: string | null }
+
+// Fotot e trajnerëve vijnë si /uploads/... nga backend — kthej URL absolute.
+function resolvedPhoto(url: string | null) {
+  if (!url) return null
+  if (url.startsWith('http')) return url
+  const base = (api.defaults.baseURL || '').replace(/\/api\/?$/, '')
+  return `${base}${url}`
+}
 
 const durationLabel = (d: number) => (d >= 28 && d <= 31 ? '/muaj' : d >= 360 && d <= 370 ? '/vit' : ` / ${d} ditë`)
 
@@ -150,8 +161,6 @@ function LevelPill({ children }: { children: string }) {
 }
 
 export default function Landing() {
-  const [day, setDay] = useState<Day>('Hën')
-  const [billing, setBilling] = useState<'monthly' | 'annual'>('monthly')
   const [openFaq, setOpenFaq] = useState(0)
   const [submitted, setSubmitted] = useState(false)
   const [liveTrainers, setLiveTrainers] = useState<PublicTrainer[]>([])
@@ -167,13 +176,17 @@ export default function Landing() {
   }, [])
 
   const coachList = liveTrainers.length > 0
-    ? liveTrainers.map((t, i) => ({
-        name: t.name,
-        role: t.trainerType === 'personal' ? 'Trajner Personal' : 'Trajner',
-        tag: t.specialization || 'CrossFit',
-        bg: img(coachImgIds[i % coachImgIds.length]),
-      }))
-    : coaches
+    ? liveTrainers.map((t, i) => {
+        const photo = resolvedPhoto(t.photoUrl)
+        return {
+          name: t.name,
+          role: t.title || (t.trainerType === 'personal' ? 'Trajner Personal' : 'Trajner'),
+          tag: t.specialization || 'CrossFit',
+          bio: t.bio || t.workExperience || t.certifications || '',
+          bg: photo ? `url('${photo}')` : img(coachImgIds[i % coachImgIds.length]),
+        }
+      })
+    : coaches.map((c) => ({ ...c, bio: '' }))
   const usingLivePlans = livePlans.length > 0
   // "Më i kërkuari" = pako e mesme sipas çmimit (vjen e renditur nga API).
   const popularIdx = usingLivePlans && livePlans.length >= 3 ? Math.floor(livePlans.length / 2) : -1
@@ -191,8 +204,6 @@ export default function Landing() {
     if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' })
   }, [hash])
 
-  const classes = day === 'Sht' ? saturdayClasses : weekdayClasses
-  const annual = billing === 'annual'
 
   const onSubmit = (e: FormEvent) => {
     e.preventDefault()
@@ -340,13 +351,17 @@ export default function Landing() {
               raportet — ata e dinë ku ke mbetur edhe kur ti e harron.
             </p>
           </div>
-          <div className="grid grid-cols-2 gap-5 md:grid-cols-3 lg:grid-cols-5">
+          <div className="mx-auto flex max-w-[980px] flex-wrap justify-center gap-x-8 gap-y-10">
             {coachList.map((c) => (
-              <div key={c.name}>
-                <div className="mb-3.5 aspect-[3/4] rounded-2xl bg-[#CFC4B0] bg-cover bg-center" style={{ backgroundImage: c.bg }} />
+              <div key={c.name} className="w-[168px] text-center sm:w-[188px]">
+                <div
+                  className="mb-4 aspect-[3/4] rounded-2xl bg-[#CFC4B0] bg-cover bg-center shadow-[0_18px_34px_-20px_rgba(36,31,24,0.45)] ring-1 ring-cocoa/5"
+                  style={{ backgroundImage: c.bg }}
+                />
                 <h3 className="font-newsreader text-[19px] font-medium">{c.name}</h3>
                 <div className="mb-1 text-[13px] font-semibold text-clay">{c.role}</div>
                 <div className="text-[13px] text-[#5C5346]">{c.tag}</div>
+                {c.bio && <p className="mt-1.5 line-clamp-2 text-[12.5px] leading-snug text-[#6E6456]">{c.bio}</p>}
               </div>
             ))}
           </div>
@@ -355,43 +370,42 @@ export default function Landing() {
 
       {/* ORARI JAVOR */}
       <section id="schedule" className="mx-auto max-w-[1200px] scroll-mt-24 px-6 pb-20 pt-24">
-        <div className="mx-auto mb-11 max-w-[560px] text-center">
+        <div className="mx-auto mb-11 max-w-[620px] text-center">
           <Eyebrow>Orari javor</Eyebrow>
-          <h2 className="font-newsreader text-[clamp(32px,3.8vw,48px)] font-normal leading-[1.05] tracking-[-0.02em]">
-            Gjej një orar që të përshtatet
+          <h2 className="mb-4 font-newsreader text-[clamp(32px,3.8vw,48px)] font-normal leading-[1.05] tracking-[-0.02em]">
+            Hapur {scheduleDays}
           </h2>
-        </div>
-        <div className="mb-9 flex flex-wrap justify-center gap-2">
-          {days.map((d) => (
-            <button
-              key={d}
-              onClick={() => setDay(d)}
-              className={`rounded-full px-[22px] py-[11px] text-[14.5px] font-semibold transition ${
-                d === day
-                  ? 'bg-cocoa text-cream'
-                  : 'border border-cocoa/20 bg-transparent text-[#413A30] hover:border-cocoa/40'
-              }`}
-            >
-              {d}
-            </button>
-          ))}
+          <p className="text-[16.5px] leading-relaxed text-[#5C5346]">
+            Katër blloqe stërvitjeje çdo ditë, nga mëngjesi te mbrëmja — zgjidh orën
+            që të përshtatet dhe eja. Grupi yt i saktë, me orarin dhe trajnerin tënd,
+            konfigurohet kur bëhesh anëtar dhe e sheh gjithmonë në aplikacion.
+          </p>
         </div>
         <div className="mx-auto flex max-w-[760px] flex-col gap-2.5">
-          {classes.map((s) => (
+          {scheduleBlocks.map((s) => (
             <div
-              key={`${day}-${s.time}-${s.name}`}
-              className="grid grid-cols-[64px_1fr] items-center gap-3 rounded-[14px] border border-cocoa/10 bg-paper px-5 py-4 sm:grid-cols-[110px_1fr_auto] sm:gap-[18px] sm:px-[22px]"
+              key={s.time}
+              className="grid grid-cols-[64px_1fr] items-center gap-3 rounded-[14px] border border-cocoa/10 bg-paper px-5 py-4 sm:grid-cols-[150px_1fr_auto] sm:gap-[18px] sm:px-[22px]"
             >
               <div className="font-newsreader text-lg sm:text-xl">{s.time}</div>
-              <div>
-                <div className="text-[15.5px] font-bold">{s.name}</div>
-                <div className="mt-0.5 text-[13px] text-[#6E6456]">me {s.coach}</div>
-              </div>
+              <div className="text-[15.5px] font-bold">{s.name}</div>
               <div className="col-span-2 justify-self-start sm:col-span-1 sm:justify-self-auto">
                 <LevelPill>{s.level}</LevelPill>
               </div>
             </div>
           ))}
+        </div>
+        <div className="mx-auto mt-10 flex max-w-[760px] flex-col items-center gap-4 rounded-[20px] border border-cocoa/10 bg-paper px-8 py-9 text-center">
+          <p className="max-w-[480px] text-[16.5px] leading-relaxed text-[#5C5346]">
+            Çdo grup ka orarin, trajnerin dhe shokët e vet. Duam të shohim nëse ka
+            vend të lirë pikërisht për ty — na shkruaj dhe të gjejmë grupin e duhur.
+          </p>
+          <a
+            href="#contact"
+            className="rounded-full bg-clay px-7 py-3.5 text-[15px] font-semibold text-cream transition hover:bg-clay/90"
+          >
+            Shiko nëse ka grupe të lira
+          </a>
         </div>
       </section>
 
@@ -400,32 +414,10 @@ export default function Landing() {
         <div className="mx-auto max-w-[1200px] px-6 py-24">
           <div className="mx-auto mb-5 max-w-[560px] text-center">
             <Eyebrow onDark>Anëtarësia</Eyebrow>
-            <h2 className="mb-5 font-newsreader text-[clamp(32px,3.8vw,48px)] font-normal leading-[1.05] tracking-[-0.02em]">
+            <h2 className="mb-5 text-white  font-newsreader text-[clamp(32px,3.8vw,48px)] font-normal leading-[1.05] tracking-[-0.02em]">
               Plane të thjeshta. Pa kontrata.
             </h2>
           </div>
-          {!usingLivePlans && (
-            <div className="mb-12 flex justify-center">
-              <div className="inline-flex rounded-full bg-cream/10 p-[5px]">
-                <button
-                  onClick={() => setBilling('monthly')}
-                  className={`rounded-full px-[22px] py-2.5 text-sm font-semibold transition ${
-                    !annual ? 'bg-cream text-cocoa' : 'text-cream'
-                  }`}
-                >
-                  Mujore
-                </button>
-                <button
-                  onClick={() => setBilling('annual')}
-                  className={`rounded-full px-[22px] py-2.5 text-sm font-semibold transition ${
-                    annual ? 'bg-cream text-cocoa' : 'text-cream'
-                  }`}
-                >
-                  Vjetore <span className="text-xs opacity-70">−15%</span>
-                </button>
-              </div>
-            </div>
-          )}
           {usingLivePlans ? (
             <div className="grid grid-cols-1 items-stretch gap-[22px] pt-7 lg:grid-cols-3">
               {livePlans.map((p, i) => (
@@ -440,7 +432,7 @@ export default function Landing() {
                       Më i kërkuari
                     </div>
                   )}
-                  <h3 className="mb-1.5 font-newsreader text-2xl font-medium">{p.name}</h3>
+                  <h3 className="mb-1.5 font-newsreader text-2xl text-white font-medium">{p.name}</h3>
                   <p className="mb-[22px] min-h-[42px] text-sm leading-normal opacity-75">
                     {p.description || 'Anëtarësi me grup, orar dhe ndjekje progresi.'}
                   </p>
@@ -487,7 +479,7 @@ export default function Landing() {
                 <h3 className="mb-1.5 font-newsreader text-2xl font-medium">{pl.name}</h3>
                 <p className="mb-[22px] min-h-[42px] text-sm leading-normal opacity-75">{pl.blurb}</p>
                 <div className="mb-6 flex items-baseline gap-1.5">
-                  <span className="font-newsreader text-[46px] leading-none">€{annual ? pl.annual : pl.monthly}</span>
+                  <span className="font-newsreader text-[46px] leading-none">€{pl.monthly}</span>
                   <span className="text-sm opacity-70">/muaj</span>
                 </div>
                 <a
@@ -564,22 +556,20 @@ export default function Landing() {
               className="mb-6 aspect-video rounded-2xl bg-[#CFC4B0] bg-cover bg-center"
               style={{ backgroundImage: img('photo-1526401485004-46910ecc8e51', 900) }}
             />
-            {/* TODO: zëvendëso me adresën, orarin dhe kontaktet reale. */}
+            {/* TODO: zëvendëso me adresën dhe kontaktet reale kur t'i kesh. */}
             <div className="flex flex-wrap gap-8">
               <div>
                 <div className="mb-1.5 text-sm font-bold">Lokacioni</div>
                 <div className="text-[14.5px] leading-normal text-[#5C5346]">
-                  Rr. e Palestrës 12
-                  <br />
-                  Prishtinë, 10000
+                  Suharekë, Kosovë
                 </div>
               </div>
               <div>
                 <div className="mb-1.5 text-sm font-bold">Orari</div>
                 <div className="text-[14.5px] leading-normal text-[#5C5346]">
-                  Hën–Pre 05:00–21:00
+                  E Hënë – E Shtunë
                   <br />
-                  Sht–Die 07:00–14:00
+                  06:00 – 21:00
                 </div>
               </div>
               <div>

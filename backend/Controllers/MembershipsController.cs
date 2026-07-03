@@ -13,10 +13,12 @@ namespace StandUpFitness.Controllers;
 public class MembershipsController : ControllerBase
 {
     private readonly FitnessContext _context;
+    private readonly IGymTimeService _gymTime;
 
-    public MembershipsController(FitnessContext context)
+    public MembershipsController(FitnessContext context, IGymTimeService gymTime)
     {
         _context = context;
+        _gymTime = gymTime;
     }
 
     private async Task<decimal> ResolveDiscountedPriceAsync(Client client, MembershipPlan plan)
@@ -238,21 +240,24 @@ public class MembershipsController : ControllerBase
 
     private async Task<Client?> ResolveClientAsync(int? clientId)
     {
+        // AsSplitQuery: 4 koleksione të Include-uara në një query të vetme bëjnë
+        // produkt kartezian (Groups × Slots × Clients × Goals…) — përgjigja
+        // fryhej dhe faqja e klientit dukej "e prishur"/e ngadaltë.
+        IQueryable<Client> query = _context.Clients
+            .Include(c => c.Plan)
+            .Include(c => c.User)
+            .Include(c => c.Groups).ThenInclude(g => g.Trainer).ThenInclude(t => t.User)
+            .Include(c => c.Groups).ThenInclude(g => g.ScheduleSlots)
+            .Include(c => c.Groups).ThenInclude(g => g.Clients)
+            .AsSplitQuery();
+
         if (clientId.HasValue)
-        {
-            return await _context.Clients
-                .Include(c => c.Plan)
-                .Include(c => c.User)
-                .FirstOrDefaultAsync(c => c.Id == clientId.Value);
-        }
+            return await query.FirstOrDefaultAsync(c => c.Id == clientId.Value);
 
         var userId = User.CurrentUserId();
         if (userId == null) return null;
 
-        return await _context.Clients
-            .Include(c => c.Plan)
-            .Include(c => c.User)
-            .FirstOrDefaultAsync(c => c.UserId == userId.Value);
+        return await query.FirstOrDefaultAsync(c => c.UserId == userId.Value);
     }
 
     // Resolves a client's plan for the purpose of reading its price/duration/session
@@ -277,9 +282,57 @@ public class MembershipsController : ControllerBase
     private async Task<object> ShapeCurrentAsync(Client client)
     {
         var plan = await ResolvePlanAsync(client);
-        var expiry = client.MembershipExpiry ?? client.StartDate.AddDays(plan?.DurationDays > 0 ? plan.DurationDays : 30);
+        var durationDays = plan?.DurationDays > 0 ? plan.DurationDays : 30;
+        var expiry = client.MembershipExpiry ?? client.StartDate.AddDays(durationDays);
         var sessionsUsed = await _context.AttendanceLogs.CountAsync(a => a.ClientId == client.Id && a.CheckInTime >= client.StartDate);
         var status = client.IsActive && expiry >= DateTime.UtcNow ? "active" : "expired";
+        // Grupet ku klienti është NË PRITJE (waitlist) nuk janë në client.Groups —
+        // ngarkohen veçmas dhe shfaqen me IsWaitlisted=true, që klienti ta shohë
+        // se ku është në radhë (më parë nuk shfaqeshin fare).
+        var memberGroupIds = client.Groups.Select(g => g.Id).ToHashSet();
+        var waitingGroupIds = await _context.GroupWaitlistEntries
+            .Where(w => w.ClientId == client.Id && w.Status == "waiting")
+            .Select(w => w.TrainingGroupId)
+            .ToListAsync();
+        var waitingGroups = waitingGroupIds.Count == 0
+            ? new List<TrainingGroup>()
+            : await _context.TrainingGroups
+                .Where(g => waitingGroupIds.Contains(g.Id) && !memberGroupIds.Contains(g.Id))
+                .Include(g => g.Trainer).ThenInclude(t => t.User)
+                .Include(g => g.ScheduleSlots)
+                .Include(g => g.Clients)
+                .AsSplitQuery()
+                .AsNoTracking()
+                .ToListAsync();
+
+        // Upcoming exceptions (cancelled/postponed/substitute) on the client's own
+        // concrete GroupSessions — the client calendar shouldn't just replay the
+        // blind weekly template, it should reflect what the trainer/admin actually
+        // changed for a specific date (GroupSessionsController).
+        var allGroupIds = memberGroupIds.ToList();
+        var todayLocal = _gymTime.LocalNow.Date;
+        var exceptions = allGroupIds.Count == 0
+            ? new List<GroupSession>()
+            : await _context.GroupSessions
+                .Where(s => allGroupIds.Contains(s.TrainingGroupId)
+                            && s.Date >= todayLocal && s.Date < todayLocal.AddDays(14)
+                            && s.Status != "scheduled")
+                .Include(s => s.SubstituteTrainer).ThenInclude(t => t!.User)
+                .OrderBy(s => s.Date)
+                .AsNoTracking()
+                .ToListAsync();
+        var exceptionsByGroup = exceptions
+            .GroupBy(s => s.TrainingGroupId)
+            .ToDictionary(g => g.Key, g => g.Select(s => (object)new
+            {
+                s.Date,
+                s.StartMin,
+                s.EndMin,
+                s.Status,
+                s.Reason,
+                s.PostponedToDate,
+                SubstituteTrainer = s.SubstituteTrainer != null ? s.SubstituteTrainer.User.Name : null
+            }).ToList());
 
         return new
         {
@@ -291,12 +344,39 @@ public class MembershipsController : ControllerBase
             Price = plan?.Price ?? 0,
             SessionsUsed = sessionsUsed,
             SessionsTotal = plan?.SessionsTotal ?? 0,
+            DurationDays = durationDays,
             AutoRenew = false,
             Type = plan?.PlanType ?? "standard",
             Shared = (plan?.MaxSharedMembers ?? 1) > 1,
-            SharedClients = plan?.MaxSharedMembers
+            SharedClients = plan?.MaxSharedMembers,
+            Groups = client.Groups
+                .OrderBy(g => g.ScheduleStart)
+                .Select(g => ShapeGroup(g, waitlisted: false, exceptionsByGroup))
+                .Concat(waitingGroups.OrderBy(g => g.ScheduleStart).Select(g => ShapeGroup(g, waitlisted: true, exceptionsByGroup)))
+                .ToList()
         };
     }
+
+    private static object ShapeGroup(TrainingGroup g, bool waitlisted, Dictionary<int, List<object>>? exceptionsByGroup = null) => new
+    {
+        g.Id,
+        g.Name,
+        g.Description,
+        Trainer = g.Trainer.User.Name,
+        g.DayOfWeek,
+        g.ScheduleStart,
+        g.ScheduleEnd,
+        Slots = g.ScheduleSlots
+            .OrderBy(s => s.StartMin)
+            .Select(s => new { s.DayOfWeek, s.StartMin, s.EndMin })
+            .ToList(),
+        g.MaxCapacity,
+        MembersCount = g.Clients.Count,
+        IsWaitlisted = waitlisted,
+        // Cancelled/postponed/substitute overrides for the next ~14 days — lets the
+        // client calendar show exceptions instead of just replaying the weekly slot.
+        Exceptions = exceptionsByGroup != null && exceptionsByGroup.TryGetValue(g.Id, out var ex) ? ex : new List<object>()
+    };
 
     private Invoice CreateMembershipInvoice(int clientId, MembershipPlan plan, decimal price)
     {

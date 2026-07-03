@@ -4,6 +4,7 @@ backend/obj/
 backend/.vs/
 backend/.vscode/
 backend/*.user
+backend/wwwroot/uploads/
 
 # Frontend
 frontend/node_modules/

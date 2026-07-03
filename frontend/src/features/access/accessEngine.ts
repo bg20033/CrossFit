@@ -43,7 +43,9 @@ export interface AccessContext {
 export interface AccessVerdict {
   decision: Decision
   reason: string
-  action: 'entry' | 'exit' | 'deny'
+  // 'trainer-checkin' = a trainer QR scan auto-opened their group session(s) —
+  // not a member entry/exit/denial (AccessController.ScanTrainerAsync).
+  action: 'entry' | 'exit' | 'deny' | 'trainer-checkin'
 }
 
 export function minutesNow(d = new Date()): number {

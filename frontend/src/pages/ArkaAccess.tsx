@@ -58,23 +58,33 @@ function VerdictBanner({ v }: { v: LastVerdict | null }) {
     )
   }
 
-  const tone =
-    v.decision === 'granted'
+  const isTrainer = v.action === 'trainer-checkin'
+  const tone = isTrainer
+    ? v.decision === 'granted'
+      ? 'border-transparent bg-gray-900 text-white'
+      : 'border-transparent bg-coral-500 text-white'
+    : v.decision === 'granted'
       ? 'border-transparent bg-[#1F9D55] text-white'
       : v.decision === 'exit'
         ? 'border-transparent bg-gray-900 text-white'
         : 'border-transparent bg-coral-500 text-white'
-  const title = v.decision === 'granted' ? 'QASJE E LEJUAR' : v.decision === 'exit' ? 'DALJE' : 'QASJE E REFUZUAR'
+  const title = isTrainer
+    ? v.decision === 'granted' ? 'ORET U HAPËN' : 'ASNJË ORË TANI'
+    : v.decision === 'granted' ? 'QASJE E LEJUAR' : v.decision === 'exit' ? 'DALJE' : 'QASJE E REFUZUAR'
 
   return (
     <div className={`rounded-2xl p-5 ${tone}`}>
       <div className="flex items-center justify-between">
         <p className="label-mono !text-white/60">{title}</p>
-        <span className="text-2xl">{v.decision === 'granted' ? 'OK' : v.decision === 'exit' ? 'Exit' : 'X'}</span>
+        <span className="text-2xl">
+          {isTrainer ? (v.decision === 'granted' ? 'OK' : 'X') : v.decision === 'granted' ? 'OK' : v.decision === 'exit' ? 'Exit' : 'X'}
+        </span>
       </div>
       <p className="mt-1 font-display text-2xl font-bold tracking-tight">{v.name}</p>
       <p className="mt-0.5 text-sm text-white/80">{v.reason}</p>
-      {v.decision !== 'denied' && <p className="mt-1 text-sm text-white/70">Grupi: {v.groupName}</p>}
+      {(isTrainer ? v.decision === 'granted' : v.decision !== 'denied') && (
+        <p className="mt-1 text-sm text-white/70">{isTrainer ? 'Grupet: ' : 'Grupi: '}{v.groupName}</p>
+      )}
     </div>
   )
 }
@@ -109,8 +119,13 @@ export default function ArkaAccess() {
     try {
       const { data } = await api.post('/access/scan', { token })
       const ts = data.scannedAt ? new Date(data.scannedAt).getTime() : Date.now()
-      const name = data.member?.name ?? token
-      const groupName = data.group?.name ?? '-'
+      const isTrainerScan = data.action === 'trainer-checkin'
+      const name = isTrainerScan ? (data.trainer?.name ?? token) : (data.member?.name ?? token)
+      const groupName = isTrainerScan
+        ? (Array.isArray(data.groupsOpened) && data.groupsOpened.length > 0
+            ? data.groupsOpened.map((g: any) => g.groupName).join(', ')
+            : '-')
+        : (data.group?.name ?? '-')
 
       setLast({
         decision: data.decision,

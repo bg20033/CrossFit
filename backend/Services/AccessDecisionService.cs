@@ -47,6 +47,18 @@ public static class AccessDecisionService
         return Math.Max(0, s.StartMin + SessionMin - nowMin);
     }
 
+    public const int TrainerEarlyOpenMin = 15;
+
+    // Trainer QR self check-in window: wider than a member's entry window (10 before
+    // to 20 after) — a trainer may scan any time from just before class through its
+    // scheduled end, not only in the first few minutes.
+    public static bool WithinTrainerOpenWindow(GroupScheduleSlot s, DateTime now, int earlyMin = TrainerEarlyOpenMin)
+    {
+        if (!IsScheduledToday(s, now)) return false;
+        var nowMin = (int)now.TimeOfDay.TotalMinutes;
+        return nowMin >= s.StartMin - earlyMin && nowMin <= s.EndMin;
+    }
+
     // Pick the slot (across all of the member's groups) scheduled today and closest
     // to "now", returning the owning group with it. Returns (null, null) if none.
     public static (TrainingGroup? group, GroupScheduleSlot? slot) ScheduledNow(
@@ -71,7 +83,8 @@ public static class AccessDecisionService
         int inGymCount,
         int capacity,
         bool alreadyInside,
-        DateTime now)
+        DateTime now,
+        string? todaysSessionStatus = null)
     {
         if (member != null && alreadyInside)
             return new("exit", "Dalje e regjistruar", "exit");
@@ -83,6 +96,14 @@ public static class AccessDecisionService
             return new("denied", "Nuk ke grup të caktuar në këtë orar", "deny");
         if (!WithinCheckinWindow(slotNow, now))
             return new("denied", "Jashtë orarit të grupit", "deny");
+        // The trainer/admin cancelled or postponed *today's* concrete session
+        // (GroupSessionsController) — the weekly template still matches, so
+        // without this check a member could scan into a class that isn't
+        // actually happening today.
+        if (todaysSessionStatus == "cancelled")
+            return new("denied", "Seanca e sotme e grupit është anuluar", "deny");
+        if (todaysSessionStatus == "postponed")
+            return new("denied", "Seanca e sotme e grupit është shtyrë", "deny");
         if (inGymCount >= capacity)
             return new("denied", "Salla është në kapacitet", "deny");
         return new("granted", "Qasje e lejuar — mirë se vjen", "entry");

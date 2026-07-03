@@ -61,7 +61,6 @@
   html {
     -webkit-text-size-adjust: 100%;
     touch-action: manipulation;
-    overflow-x: hidden;
   }
   body {
     @apply bg-background font-sans text-foreground antialiased;

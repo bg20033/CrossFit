@@ -743,6 +743,60 @@ namespace StandUpFitness.Migrations
                     b.ToTable("Goals", (string)null);
                 });
 
+            modelBuilder.Entity("StandUpFitness.Models.GroupMessage", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    b.Property<string>("Body")
+                        .IsRequired()
+                        .HasMaxLength(4000)
+                        .HasColumnType("varchar(4000)");
+
+                    b.Property<int>("SenderUserId")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("SentAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<int>("TrainingGroupId")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("SenderUserId");
+
+                    b.HasIndex("TrainingGroupId", "SentAt");
+
+                    b.ToTable("GroupMessages", (string)null);
+                });
+
+            modelBuilder.Entity("StandUpFitness.Models.GroupMessageRead", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("LastReadAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<int>("TrainingGroupId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("UserId")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TrainingGroupId", "UserId")
+                        .IsUnique();
+
+                    b.HasIndex("UserId");
+
+                    b.ToTable("GroupMessageReads", (string)null);
+                });
+
             modelBuilder.Entity("StandUpFitness.Models.GroupScheduleSlot", b =>
                 {
                     b.Property<int>("Id")
@@ -1352,6 +1406,11 @@ namespace StandUpFitness.Migrations
 
                     b.Property<string>("Note")
                         .HasColumnType("longtext");
+
+                    b.Property<int>("Reps")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasDefaultValue(1);
 
                     b.Property<int>("UserId")
                         .HasColumnType("int");
@@ -2028,6 +2087,9 @@ namespace StandUpFitness.Migrations
                         .IsRequired()
                         .HasColumnType("longtext");
 
+                    b.Property<string>("Certifications")
+                        .HasColumnType("longtext");
+
                     b.Property<decimal>("CommissionPerClient")
                         .HasPrecision(18, 2)
                         .HasColumnType("decimal(18,2)");
@@ -2047,8 +2109,17 @@ namespace StandUpFitness.Migrations
                         .HasMaxLength(20)
                         .HasColumnType("varchar(20)");
 
+                    b.Property<string>("PhotoUrl")
+                        .HasColumnType("longtext");
+
+                    b.Property<string>("QrToken")
+                        .HasColumnType("varchar(255)");
+
                     b.Property<string>("Specialization")
                         .IsRequired()
+                        .HasColumnType("longtext");
+
+                    b.Property<string>("Title")
                         .HasColumnType("longtext");
 
                     b.Property<string>("TrainerType")
@@ -2056,13 +2127,21 @@ namespace StandUpFitness.Migrations
                         .HasMaxLength(40)
                         .HasColumnType("varchar(40)");
 
+                    b.Property<string>("Trainings")
+                        .HasColumnType("longtext");
+
                     b.Property<DateTime>("UpdatedAt")
                         .HasColumnType("datetime(6)");
 
                     b.Property<int>("UserId")
                         .HasColumnType("int");
 
+                    b.Property<string>("WorkExperience")
+                        .HasColumnType("longtext");
+
                     b.HasKey("Id");
+
+                    b.HasIndex("QrToken");
 
                     b.HasIndex("UserId");
 
@@ -2662,6 +2741,44 @@ namespace StandUpFitness.Migrations
                         .IsRequired();
 
                     b.Navigation("Client");
+                });
+
+            modelBuilder.Entity("StandUpFitness.Models.GroupMessage", b =>
+                {
+                    b.HasOne("StandUpFitness.Models.User", "Sender")
+                        .WithMany()
+                        .HasForeignKey("SenderUserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("StandUpFitness.Models.TrainingGroup", "TrainingGroup")
+                        .WithMany()
+                        .HasForeignKey("TrainingGroupId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Sender");
+
+                    b.Navigation("TrainingGroup");
+                });
+
+            modelBuilder.Entity("StandUpFitness.Models.GroupMessageRead", b =>
+                {
+                    b.HasOne("StandUpFitness.Models.TrainingGroup", "TrainingGroup")
+                        .WithMany()
+                        .HasForeignKey("TrainingGroupId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("StandUpFitness.Models.User", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("TrainingGroup");
+
+                    b.Navigation("User");
                 });
 
             modelBuilder.Entity("StandUpFitness.Models.GroupScheduleSlot", b =>

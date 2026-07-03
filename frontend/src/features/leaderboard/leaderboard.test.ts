@@ -1,60 +1,51 @@
 import { describe, it, expect } from 'vitest'
-import { parseScore, formatScore, buildBoard, isBetter, type CommunityScore } from './leaderboardStore'
+import { EXERCISES, exerciseByKey, formatScore, isBetter, registeredAtLabel, type PrEntry } from './leaderboardStore'
 
-describe('parseScore', () => {
-  it('parses mm:ss into seconds', () => {
-    expect(parseScore('time', '3:45')).toBe(225)
-    expect(parseScore('time', '0:59')).toBe(59)
-  })
-  it('parses raw seconds for time', () => {
-    expect(parseScore('time', '90')).toBe(90)
-  })
-  it('parses load and reps as numbers', () => {
-    expect(parseScore('load', '100')).toBe(100)
-    expect(parseScore('reps', '22')).toBe(22)
-  })
-  it('rejects invalid input', () => {
-    expect(parseScore('time', 'abc')).toBeNull()
-    expect(parseScore('load', '')).toBeNull()
-    expect(parseScore('load', '-5')).toBeNull()
-  })
+const pr = (weightKg: number, reps: number): PrEntry => ({
+  id: 'x',
+  exercise: 'back-squat',
+  weightKg,
+  reps,
+  date: '2026-07-02',
 })
 
-describe('formatScore', () => {
-  it('formats each type', () => {
-    expect(formatScore('time', 225)).toBe('3:45')
-    expect(formatScore('load', 100)).toBe('100 kg')
-    expect(formatScore('reps', 22)).toBe('22 reps')
+describe('EXERCISES', () => {
+  it('contains the 12 base lifts with unique keys', () => {
+    expect(EXERCISES).toHaveLength(12)
+    expect(new Set(EXERCISES.map((e) => e.key)).size).toBe(12)
+    expect(exerciseByKey('back-squat')?.name).toBe('Back Squat')
+    expect(exerciseByKey('clean-and-jerk')?.bodyweight).toBe(false)
+    expect(exerciseByKey('pull-ups')?.bodyweight).toBe(true)
   })
 })
 
 describe('isBetter', () => {
-  it('lower wins for time, higher for others', () => {
-    expect(isBetter('time', 180, 200)).toBe(true)
-    expect(isBetter('load', 200, 180)).toBe(true)
-    expect(isBetter('reps', 18, 22)).toBe(false)
+  it('heavier weight wins', () => {
+    expect(isBetter(pr(110, 1), pr(100, 10))).toBe(true)
+    expect(isBetter(pr(90, 10), pr(100, 1))).toBe(false)
+  })
+  it('equal weight → more reps wins', () => {
+    expect(isBetter(pr(100, 6), pr(100, 5))).toBe(true)
+    expect(isBetter(pr(0, 15), pr(0, 12))).toBe(true)
   })
 })
 
-describe('buildBoard', () => {
-  const community: CommunityScore[] = [
-    { athlete: 'A', benchmark: 'fran', value: 200 },
-    { athlete: 'B', benchmark: 'fran', value: 160 },
-  ]
-  it('sorts time ascending and inserts the user', () => {
-    const board = buildBoard('fran', community, 150, 'Ti')
-    expect(board[0]).toMatchObject({ athlete: 'Ti', value: 150, isMe: true })
-    expect(board.map((r) => r.value)).toEqual([150, 160, 200])
+describe('formatScore', () => {
+  it('formats barbell lifts as kg × reps', () => {
+    expect(formatScore(pr(100, 5), false)).toBe('100 kg × 5')
   })
-  it('omits the user when no PB', () => {
-    const board = buildBoard('fran', community, null)
-    expect(board.some((r) => r.isMe)).toBe(false)
+  it('formats bodyweight as reps, with +kg when weighted', () => {
+    expect(formatScore(pr(0, 12), true)).toBe('12 reps')
+    expect(formatScore(pr(10, 8), true)).toBe('+10 kg × 8')
   })
 })
 
-describe('server community rows', () => {
-  it('starts empty when the API has no records', () => {
-    const board = buildBoard('fran', [], null)
-    expect(board).toEqual([])
+describe('registeredAtLabel', () => {
+  it('is empty without a timestamp', () => {
+    expect(registeredAtLabel(undefined)).toBe('')
+    expect(registeredAtLabel('jo-datë')).toBe('')
+  })
+  it('formats an ISO timestamp', () => {
+    expect(registeredAtLabel('2026-07-02T12:30:00Z')).toMatch(/2026/)
   })
 })

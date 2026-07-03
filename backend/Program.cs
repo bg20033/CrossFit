@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Diagnostics;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.FileProviders;
 using Microsoft.IdentityModel.Tokens;
 using System.Diagnostics;
 using System.Text;
@@ -12,6 +13,8 @@ using System.Threading.RateLimiting;
 using Microsoft.Extensions.Configuration;
 using StandUpFitness.Data;
 using StandUpFitness.Services;
+
+var mySqlServerVersion = new MySqlServerVersion(new Version(8, 4, 8));
 
 // One-shot migration runner: `dotnet StandUpFitness.dll --migrate` applies pending
 // EF Core migrations + seeds the RBAC baseline, then exits — no Kestrel, no CORS/JWT
@@ -31,7 +34,7 @@ if (args.Contains("--migrate"))
         throw new InvalidOperationException("ConnectionStrings:DefaultConnection is required to run migrations (env var ConnectionStrings__DefaultConnection).");
 
     var migrateOptions = new DbContextOptionsBuilder<FitnessContext>()
-        .UseMySql(migrateConnectionString, ServerVersion.AutoDetect(migrateConnectionString))
+        .UseMySql(migrateConnectionString, mySqlServerVersion)
         .Options;
 
     using (var migrateContext = new FitnessContext(migrateOptions))
@@ -84,6 +87,7 @@ builder.Services.AddScoped<INotificationService, NotificationService>();
 builder.Services.AddHostedService<ClassReminderService>();
 builder.Services.AddHostedService<RentInvoiceService>();
 builder.Services.AddHostedService<MembershipExpiryService>();
+builder.Services.AddHostedService<GroupSessionGeneratorService>();
 builder.Services.AddScoped<IPaymentGatewayService, PaymentGatewayService>();
 builder.Services.AddScoped<IClaimsTransformation, PermissionClaimsTransformation>();
 builder.Services.AddSingleton<IGymTimeService, GymTimeService>();
@@ -96,7 +100,7 @@ var connectionString = builder.Configuration.GetConnectionString("DefaultConnect
 if (string.IsNullOrWhiteSpace(connectionString))
     throw new InvalidOperationException("ConnectionStrings:DefaultConnection is required. Set it via env var ConnectionStrings__DefaultConnection.");
 builder.Services.AddDbContext<FitnessContext>(options =>
-    options.UseMySql(connectionString, ServerVersion.AutoDetect(connectionString))
+    options.UseMySql(connectionString, mySqlServerVersion)
 );
 
 // JWT Authentication
@@ -294,6 +298,16 @@ if (hasFrontendBuild)
     app.UseDefaultFiles();
     app.UseStaticFiles();
 }
+
+// Uploaded files (trainer photos, etc.) — served regardless of whether the SPA
+// build is present, unlike the wwwroot UseStaticFiles() above.
+var uploadsPath = Path.Combine(webRoot, "uploads");
+Directory.CreateDirectory(uploadsPath);
+app.UseStaticFiles(new StaticFileOptions
+{
+    FileProvider = new PhysicalFileProvider(uploadsPath),
+    RequestPath = "/uploads"
+});
 
 app.UseCors("App");
 app.UseRateLimiter();

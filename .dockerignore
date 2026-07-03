@@ -4,6 +4,7 @@
 **/bin
 **/obj
 **/node_modules
+backend/wwwroot/uploads
 frontend/dist
 frontend/*.tsbuildinfo
 *.log

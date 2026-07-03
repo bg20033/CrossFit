@@ -3,94 +3,98 @@ import { persist } from 'zustand/middleware'
 import api from '../../utils/api'
 
 /**
- * Leaderboard / PR tracker. Benchmark WODs + lifts with a personal-record log and
- * a gym-wide board sourced from the backend.
+ * PR tracker i ngritjeve (peshë × përsëritje). Benchmark WOD-et u hoqën —
+ * mbeten vetëm ushtrimet bazë. Çdo rezultat mban peshën (kg), reps dhe
+ * kohën kur u regjistrua (CreatedAt nga serveri).
  */
 
-// 'time' = lower is better (mm:ss); 'load' = heavier is better (kg); 'reps' = more is better.
-export type ScoreType = 'time' | 'load' | 'reps'
-
-export interface Benchmark {
+export interface Exercise {
   key: string
   name: string
-  category: 'WOD' | 'Lift'
-  type: ScoreType
-  description: string
+  /** true = ushtrim me peshë trupore — pesha shtesë opsionale (0 = trup i lirë). */
+  bodyweight: boolean
 }
 
-export const BENCHMARKS: Benchmark[] = [
-  { key: 'fran', name: 'Fran', category: 'WOD', type: 'time', description: '21-15-9 Thrusters (43/30kg) & Pull-ups' },
-  { key: 'grace', name: 'Grace', category: 'WOD', type: 'time', description: '30 Clean & Jerks (61/43kg)' },
-  { key: 'helen', name: 'Helen', category: 'WOD', type: 'time', description: '3 rounds: 400m run, 21 KB swings, 12 pull-ups' },
-  { key: 'diane', name: 'Diane', category: 'WOD', type: 'time', description: '21-15-9 Deadlifts (102/70kg) & HSPU' },
-  { key: 'cindy', name: 'Cindy', category: 'WOD', type: 'reps', description: '20 min AMRAP: 5 pull-ups, 10 push-ups, 15 squats' },
-  { key: 'murph', name: 'Murph', category: 'WOD', type: 'time', description: '1mi run, 100 pull-ups, 200 push-ups, 300 squats, 1mi run' },
-  { key: 'backsquat', name: 'Back Squat 1RM', category: 'Lift', type: 'load', description: 'Një përsëritje maksimale' },
-  { key: 'deadlift', name: 'Deadlift 1RM', category: 'Lift', type: 'load', description: 'Një përsëritje maksimale' },
-  { key: 'clean', name: 'Clean 1RM', category: 'Lift', type: 'load', description: 'Një përsëritje maksimale' },
-  { key: 'snatch', name: 'Snatch 1RM', category: 'Lift', type: 'load', description: 'Një përsëritje maksimale' },
-  { key: 'press', name: 'Strict Press 1RM', category: 'Lift', type: 'load', description: 'Një përsëritje maksimale' },
+export const EXERCISES: Exercise[] = [
+  { key: 'back-squat', name: 'Back Squat', bodyweight: false },
+  { key: 'front-squat', name: 'Front Squat', bodyweight: false },
+  { key: 'deadlift', name: 'Deadlift', bodyweight: false },
+  { key: 'bench-press', name: 'Bench Press', bodyweight: false },
+  { key: 'overhead-press', name: 'Overhead Press', bodyweight: false },
+  { key: 'clean-and-jerk', name: 'Clean & Jerk', bodyweight: false },
+  { key: 'clean', name: 'Clean', bodyweight: false },
+  { key: 'snatch', name: 'Snatch', bodyweight: false },
+  { key: 'pull-ups', name: 'Pull Ups', bodyweight: true },
+  { key: 'chin-ups', name: 'Chin Ups', bodyweight: true },
+  { key: 'dips', name: 'Dips', bodyweight: true },
+  { key: 'push-ups', name: 'Push Ups', bodyweight: true },
 ]
 
-export const benchmarkByKey = (key: string) => BENCHMARKS.find((b) => b.key === key)
+export const exerciseByKey = (key: string) => EXERCISES.find((e) => e.key === key)
+
+// Çelësat e vjetër të ruajtur në server → çelësat e rinj (të dhënat s'humbin).
+const LEGACY_KEYS: Record<string, string> = {
+  backsquat: 'back-squat',
+  press: 'overhead-press',
+}
+const normalizeKey = (key: string) => LEGACY_KEYS[key] ?? key
 
 export interface PrEntry {
   id: string
   serverId?: number
-  benchmark: string // benchmark key
-  /** Stored numerically: seconds for 'time', kg for 'load', reps for 'reps'. */
-  value: number
-  date: string // yyyy-mm-dd
+  exercise: string // exercise key
+  weightKg: number // 0 = trup i lirë
+  reps: number
+  date: string // yyyy-mm-dd — dita kur u krye
+  createdAt?: string // ISO — koha kur u regjistrua në sistem
   note?: string
-}
-
-export interface CommunityScore {
-  athlete: string
-  benchmark: string
-  value: number
 }
 
 interface LeaderboardState {
   prs: PrEntry[]
-  community: CommunityScore[]
   hydrate: () => Promise<void>
   addPr: (e: Omit<PrEntry, 'id'>) => Promise<PrEntry>
   removePr: (id: string) => Promise<void>
-  prsFor: (benchmark: string) => PrEntry[]
-  bestFor: (benchmark: string) => PrEntry | null
+  prsFor: (exercise: string) => PrEntry[]
+  bestFor: (exercise: string) => PrEntry | null
 }
 
-/** Lower-is-better for time, higher-is-better otherwise. */
-export function isBetter(type: ScoreType, a: number, b: number) {
-  return type === 'time' ? a < b : a > b
+/** Më i mirë = peshë më e madhe; barazim → më shumë reps. */
+export function isBetter(a: PrEntry, b: PrEntry) {
+  return a.weightKg !== b.weightKg ? a.weightKg > b.weightKg : a.reps > b.reps
 }
 
 export const useLeaderboard = create<LeaderboardState>()(
   persist(
     (set, get) => ({
       prs: [],
-      community: [],
-      // Leaderboard page is personal-only: fetch just this user's own PRs.
-      // (The gym-wide /leaderboard/board endpoint and buildBoard() below are
-      // left in place for future reuse, just not called from here anymore.)
+      // Faqja është personale: vetëm rezultatet e userit aktual.
       hydrate: async () => {
         try {
           const prsRes = await api.get('/leaderboard/prs')
           const server: PrEntry[] = Array.isArray(prsRes.data) ? prsRes.data.map((r: any) => ({
             id: `srv-${r.id}`,
             serverId: r.id,
-            benchmark: r.benchmark,
-            value: Number(r.value),
+            exercise: normalizeKey(String(r.benchmark)),
+            weightKg: Number(r.value),
+            reps: Number(r.reps ?? 1),
             date: String(r.date).slice(0, 10),
+            createdAt: r.createdAt ? String(r.createdAt) : undefined,
             note: r.note ?? undefined,
           })) : []
-          set({ prs: server, community: [] })
+          set({ prs: server })
         } catch {
-          set({ prs: [], community: [] })
+          set({ prs: [] })
         }
       },
       addPr: async (e) => {
-        const res = await api.post('/leaderboard/prs', { benchmark: e.benchmark, value: e.value, date: e.date, note: e.note })
+        const res = await api.post('/leaderboard/prs', {
+          benchmark: e.exercise,
+          value: e.weightKg,
+          reps: e.reps,
+          date: e.date,
+          note: e.note,
+        })
         const serverId = Number(res.data?.id)
         if (!Number.isFinite(serverId)) throw new Error('Serveri nuk ktheu ID për rekordin.')
         const row: PrEntry = { ...e, id: `srv-${serverId}`, serverId }
@@ -105,67 +109,35 @@ export const useLeaderboard = create<LeaderboardState>()(
         set((s) => ({ prs: s.prs.filter((p) => p.id !== id) }))
         await get().hydrate()
       },
-      prsFor: (benchmark) =>
+      prsFor: (exercise) =>
         get()
-          .prs.filter((p) => p.benchmark === benchmark)
+          .prs.filter((p) => p.exercise === exercise)
           .sort((a, b) => (a.date < b.date ? 1 : -1)),
-      bestFor: (benchmark) => {
-        const bm = benchmarkByKey(benchmark)
-        if (!bm) return null
-        const mine = get().prs.filter((p) => p.benchmark === benchmark)
+      bestFor: (exercise) => {
+        const mine = get().prs.filter((p) => p.exercise === exercise)
         if (mine.length === 0) return null
-        return mine.reduce((best, p) => (isBetter(bm.type, p.value, best.value) ? p : best))
+        return mine.reduce((best, p) => (isBetter(p, best) ? p : best))
       },
     }),
     {
-      name: 'sucf-leaderboard-v2',
-      partialize: (s) => ({ prs: s.prs, community: s.community }),
+      name: 'sucf-leaderboard-v3',
+      partialize: (s) => ({ prs: s.prs }),
     }
   )
 )
 
-/** Format a stored value for display based on score type. */
-export function formatScore(type: ScoreType, value: number): string {
-  if (type === 'time') {
-    const m = Math.floor(value / 60)
-    const s = value % 60
-    return `${m}:${String(s).padStart(2, '0')}`
+/** "100 kg × 5" për ngritjet, "12 reps" (ose "+10 kg × 8") për peshën trupore. */
+export function formatScore(p: Pick<PrEntry, 'weightKg' | 'reps'>, bodyweight: boolean): string {
+  if (bodyweight) {
+    return p.weightKg > 0 ? `+${p.weightKg} kg × ${p.reps}` : `${p.reps} reps`
   }
-  if (type === 'load') return `${value} kg`
-  return `${value} reps`
+  return `${p.weightKg} kg × ${p.reps}`
 }
 
-/** Parse a user input into a stored numeric value. Time accepts "mm:ss" or seconds. */
-export function parseScore(type: ScoreType, raw: string): number | null {
-  const v = raw.trim()
-  if (!v) return null
-  if (type === 'time') {
-    if (v.includes(':')) {
-      const [m, s] = v.split(':')
-      const mm = Number(m)
-      const ss = Number(s)
-      if (Number.isNaN(mm) || Number.isNaN(ss)) return null
-      return mm * 60 + ss
-    }
-    const n = Number(v)
-    return Number.isNaN(n) ? null : Math.round(n)
-  }
-  const n = Number(v)
-  return Number.isNaN(n) || n < 0 ? null : n
-}
-
-/** Build a sorted leaderboard for one benchmark, including the current user's best. */
-export function buildBoard(
-  benchmark: string,
-  community: CommunityScore[],
-  myBest: number | null,
-  myName = 'Ti'
-): { athlete: string; value: number; isMe: boolean }[] {
-  const bm = benchmarkByKey(benchmark)
-  if (!bm) return []
-  const rows = community
-    .filter((c) => c.benchmark === benchmark)
-    .map((c) => ({ athlete: c.athlete, value: c.value, isMe: false }))
-  if (myBest != null) rows.push({ athlete: myName, value: myBest, isMe: true })
-  return rows.sort((a, b) => (isBetter(bm.type, a.value, b.value) ? -1 : 1))
+/** Koha e regjistrimit për shfaqje — "02.07.2026, 14:35". */
+export function registeredAtLabel(createdAt?: string): string {
+  if (!createdAt) return ''
+  const d = new Date(createdAt.endsWith('Z') || createdAt.includes('+') ? createdAt : `${createdAt}Z`)
+  if (Number.isNaN(d.getTime())) return ''
+  return d.toLocaleString('sq-AL', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })
 }

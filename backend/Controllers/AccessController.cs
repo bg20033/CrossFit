@@ -64,6 +64,15 @@ public class AccessController : ControllerBase
         var utcNow = DateTime.UtcNow;
         var scannerId = User.CurrentUserId();
 
+        // Trainer QR (GAP-4 automated): scanning it opens — auto marks held/checked-in —
+        // every one of the trainer's group sessions scheduled right now, instead of the
+        // trainer clicking "trainer-checkin" per group in TrajnerGrupet.
+        var trainer = await _context.Trainers
+            .Include(t => t.User)
+            .FirstOrDefaultAsync(t => t.QrToken != null && t.QrToken.ToUpper() == token);
+        if (trainer != null)
+            return await ScanTrainerAsync(trainer, now, utcNow);
+
         var member = await _context.Clients
             .Include(c => c.User)
             .Include(c => c.Groups)
@@ -82,9 +91,21 @@ public class AccessController : ControllerBase
         if (member != null)
             (groupNow, slotNow) = AccessDecisionService.ScheduledNow(member.Groups, now);
 
+        // Today's concrete GroupSession may have been cancelled/postponed by the
+        // trainer/admin (GroupSessionsController) even though the weekly template
+        // still matches — check it so a cancelled class doesn't silently grant entry.
+        string? todaysSessionStatus = null;
+        if (groupNow != null && slotNow != null)
+        {
+            todaysSessionStatus = await _context.GroupSessions
+                .Where(s => s.TrainingGroupId == groupNow.Id && s.Date == now.Date && s.StartMin == slotNow.StartMin)
+                .Select(s => s.Status)
+                .FirstOrDefaultAsync();
+        }
+
         var inGymCount = await _context.AttendanceLogs.CountAsync(a => a.CheckOutTime == null && a.Decision == "granted");
         var capacity = groupNow?.MaxCapacity > 0 ? groupNow.MaxCapacity : AccessDecisionService.DefaultCapacity;
-        var verdict = AccessDecisionService.Decide(member, groupNow, slotNow, inGymCount, capacity, activeLog != null, now);
+        var verdict = AccessDecisionService.Decide(member, groupNow, slotNow, inGymCount, capacity, activeLog != null, now, todaysSessionStatus);
 
         AttendanceLog? savedLog = null;
         if (member != null)
@@ -151,6 +172,95 @@ public class AccessController : ControllerBase
             inGymCount = verdict.Action == "entry" ? inGymCount + 1 : Math.Max(0, inGymCount - (verdict.Action == "exit" ? 1 : 0)),
             capacity,
             logId = savedLog?.Id,
+            scannedAt = now
+        });
+    }
+
+    // A trainer's QR scan doesn't gate entry — it opens sessions. "Now" is the trainer's
+    // group scheduled from 15min before start through the scheduled end, wider than the
+    // member entry window since a trainer may scan any time during class.
+    private async Task<IActionResult> ScanTrainerAsync(Trainer trainer, DateTime now, DateTime utcNow)
+    {
+        var groups = await _context.TrainingGroups
+            .Include(g => g.ScheduleSlots)
+            .Where(g => g.TrainerId == trainer.Id)
+            .ToListAsync();
+
+        var dueNow = groups
+            .SelectMany(g => AccessDecisionService.EffectiveSlots(g).Select(s => (group: g, slot: s)))
+            .Where(x => AccessDecisionService.WithinTrainerOpenWindow(x.slot, now))
+            .ToList();
+
+        if (dueNow.Count == 0)
+        {
+            return Ok(new
+            {
+                decision = "denied",
+                action = "deny",
+                reason = "Nuk ke asnjë grup të planifikuar tani",
+                trainer = new { trainer.Id, name = trainer.User.Name },
+                groupsOpened = Array.Empty<object>(),
+                scannedAt = now
+            });
+        }
+
+        var today = now.Date;
+        var openedGroups = new List<object>();
+        var anyOpened = false;
+        var anyNewlyOpened = false;
+
+        foreach (var (group, slot) in dueNow)
+        {
+            var session = await _context.GroupSessions
+                .FirstOrDefaultAsync(s => s.TrainingGroupId == group.Id && s.Date == today && s.StartMin == slot.StartMin);
+
+            if (session == null)
+            {
+                // Self-heal: the month's sessions may not have been generated yet
+                // (GroupSessionsController.Generate) — open one on the fly.
+                session = new GroupSession
+                {
+                    TrainingGroupId = group.Id,
+                    Date = today,
+                    DayOfWeek = slot.DayOfWeek,
+                    StartMin = slot.StartMin,
+                    EndMin = slot.EndMin,
+                    Status = "scheduled"
+                };
+                _context.GroupSessions.Add(session);
+            }
+
+            if (session.Status is "cancelled" or "postponed")
+            {
+                openedGroups.Add(new { groupId = group.Id, groupName = group.Name, status = session.Status });
+                continue;
+            }
+
+            var wasCheckedIn = session.TrainerCheckedIn;
+            session.TrainerCheckedIn = true;
+            session.TrainerCheckInTime = utcNow;
+            session.Status = "held";
+            session.UpdatedAt = utcNow;
+            anyOpened = true;
+            if (!wasCheckedIn) anyNewlyOpened = true;
+
+            openedGroups.Add(new { groupId = group.Id, groupName = group.Name, status = session.Status, alreadyCheckedIn = wasCheckedIn });
+        }
+
+        await _context.SaveChangesAsync();
+
+        var decision = anyOpened ? "granted" : "denied";
+        var reason = anyOpened
+            ? (anyNewlyOpened ? "Oret u hapën — mirë se erdhe" : "Oret ishin tashmë të hapura")
+            : "Grupet e planifikuara tani janë anuluar ose shtyrë";
+
+        return Ok(new
+        {
+            decision,
+            action = "trainer-checkin",
+            reason,
+            trainer = new { trainer.Id, name = trainer.User.Name },
+            groupsOpened = openedGroups,
             scannedAt = now
         });
     }

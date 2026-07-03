@@ -53,6 +53,8 @@ public class FitnessContext : DbContext
     public DbSet<TrainerWeeklyReport> TrainerWeeklyReports { get; set; } = null!;
     public DbSet<GroupWaitlistEntry> GroupWaitlistEntries { get; set; } = null!;
     public DbSet<DirectMessage> DirectMessages { get; set; } = null!;
+    public DbSet<GroupMessage> GroupMessages { get; set; } = null!;
+    public DbSet<GroupMessageRead> GroupMessageReads { get; set; } = null!;
     public DbSet<GymNotice> GymNotices { get; set; } = null!;
     public DbSet<GymSettings> GymSettings { get; set; } = null!;
     public DbSet<ProgressPhoto> ProgressPhotos { get; set; } = null!;
@@ -157,6 +159,7 @@ public class FitnessContext : DbContext
         modelBuilder.Entity<Goal>().Property(g => g.TargetValue).HasPrecision(8, 2);
         modelBuilder.Entity<ProgressPhoto>().Property(p => p.Weight).HasPrecision(8, 2);
         modelBuilder.Entity<PersonalRecord>().Property(p => p.Value).HasPrecision(10, 2);
+        modelBuilder.Entity<PersonalRecord>().Property(p => p.Reps).HasDefaultValue(1);
         modelBuilder.Entity<FoodLogEntry>().Property(f => f.Protein).HasPrecision(8, 2);
         modelBuilder.Entity<FoodLogEntry>().Property(f => f.Carbs).HasPrecision(8, 2);
         modelBuilder.Entity<FoodLogEntry>().Property(f => f.Fat).HasPrecision(8, 2);
@@ -475,6 +478,10 @@ public class FitnessContext : DbContext
         // QR access token on Client (opaque; indexed for fast scan lookups).
         modelBuilder.Entity<Client>().HasIndex(c => c.QrToken);
 
+        // QR access token on Trainer — scanning it at Arka auto-opens his group
+        // sessions scheduled now (AccessController.ScanTrainerAsync).
+        modelBuilder.Entity<Trainer>().HasIndex(t => t.QrToken);
+
         // TrainerTenant — rental trainer profile linked to a User.
         modelBuilder.Entity<TrainerTenant>(e =>
         {
@@ -587,6 +594,22 @@ public class FitnessContext : DbContext
             e.HasOne(m => m.Receiver).WithMany().HasForeignKey(m => m.ReceiverUserId).OnDelete(DeleteBehavior.Restrict);
             e.HasIndex(m => new { m.SenderUserId, m.ReceiverUserId, m.SentAt });
             e.Property(m => m.Body).HasMaxLength(4000);
+        });
+
+        // Group chat — one shared thread per TrainingGroup.
+        modelBuilder.Entity<GroupMessage>(e =>
+        {
+            e.HasOne(m => m.TrainingGroup).WithMany().HasForeignKey(m => m.TrainingGroupId).OnDelete(DeleteBehavior.Cascade);
+            e.HasOne(m => m.Sender).WithMany().HasForeignKey(m => m.SenderUserId).OnDelete(DeleteBehavior.Restrict);
+            e.HasIndex(m => new { m.TrainingGroupId, m.SentAt });
+            e.Property(m => m.Body).HasMaxLength(4000);
+        });
+
+        modelBuilder.Entity<GroupMessageRead>(e =>
+        {
+            e.HasOne(r => r.TrainingGroup).WithMany().HasForeignKey(r => r.TrainingGroupId).OnDelete(DeleteBehavior.Cascade);
+            e.HasOne(r => r.User).WithMany().HasForeignKey(r => r.UserId).OnDelete(DeleteBehavior.Cascade);
+            e.HasIndex(r => new { r.TrainingGroupId, r.UserId }).IsUnique();
         });
 
         modelBuilder.Entity<GymNotice>(e =>

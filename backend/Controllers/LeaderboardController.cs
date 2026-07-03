@@ -34,7 +34,7 @@ public class LeaderboardController : ControllerBase
         var rows = await _context.PersonalRecords
             .Where(p => p.UserId == uid)
             .OrderByDescending(p => p.Date)
-            .Select(p => new { p.Id, p.Benchmark, p.Value, p.Date, p.Note })
+            .Select(p => new { p.Id, p.Benchmark, p.Value, p.Reps, p.Date, p.Note, p.CreatedAt })
             .ToListAsync();
         return Ok(rows);
     }
@@ -47,16 +47,21 @@ public class LeaderboardController : ControllerBase
         var key = benchmark.Trim().ToLowerInvariant();
         var lowerWins = LowerIsBetterBenchmarks.Contains(key);
 
-        var grouped = await _context.PersonalRecords
+        // Rezultatet e reja janë peshë × reps: fituesi = pesha më e madhe, barazim →
+        // më shumë reps. (Çelësat legacy të WOD-eve me kohë mbeten lower-wins.)
+        var all = await _context.PersonalRecords
             .Where(p => p.Benchmark == key)
-            .Include(p => p.User)
-            .GroupBy(p => new { p.UserId, p.User.Name })
-            .Select(g => new { athlete = g.Key.Name, best = g.Min(x => x.Value), bestHigh = g.Max(x => x.Value) })
+            .Select(p => new { p.UserId, Athlete = p.User.Name, p.Value, p.Reps })
             .ToListAsync();
 
-        var rows = grouped
-            .Select(r => new { r.athlete, value = lowerWins ? r.best : r.bestHigh })
+        var rows = all
+            .GroupBy(p => new { p.UserId, p.Athlete })
+            .Select(g => lowerWins
+                ? g.OrderBy(x => x.Value).First()
+                : g.OrderByDescending(x => x.Value).ThenByDescending(x => x.Reps).First())
+            .Select(r => new { athlete = r.Athlete, value = r.Value, reps = r.Reps })
             .OrderBy(r => lowerWins ? r.value : -r.value)
+            .ThenByDescending(r => r.reps)
             .ThenBy(r => r.athlete)
             .ToList();
         return Ok(rows);
@@ -68,7 +73,12 @@ public class LeaderboardController : ControllerBase
         var uid = User.CurrentUserId();
         if (uid == null) return Forbid();
         if (string.IsNullOrWhiteSpace(request.Benchmark)) return BadRequest(new { message = "benchmark required" });
-        if (request.Value <= 0) return BadRequest(new { message = "value must be greater than zero" });
+        // Pesha 0 lejohet (ushtrime me peshë trupore — pull-ups, dips, push-ups…),
+        // por atëherë duhen reps; negativet jo.
+        if (request.Value < 0) return BadRequest(new { message = "Pesha s'mund të jetë negative." });
+        var reps = request.Reps ?? 1;
+        if (reps < 1 || reps > 1000) return BadRequest(new { message = "Përsëritjet duhet të jenë 1–1000." });
+        if (request.Value == 0 && reps < 1) return BadRequest(new { message = "Vendos peshën ose përsëritjet." });
         if (request.Date.HasValue && request.Date.Value.Date > DateTime.UtcNow.Date.AddDays(1))
             return BadRequest(new { message = "date cannot be in the future" });
         var key = request.Benchmark.Trim().ToLowerInvariant();
@@ -77,6 +87,7 @@ public class LeaderboardController : ControllerBase
             UserId = uid.Value,
             Benchmark = key,
             Value = request.Value,
+            Reps = reps,
             Date = request.Date ?? DateTime.UtcNow,
             Note = request.Note,
         };
@@ -101,7 +112,8 @@ public class LeaderboardController : ControllerBase
 public class PrRequest
 {
     [Required, MaxLength(40)] public string Benchmark { get; set; } = null!;
-    public decimal Value { get; set; }
+    public decimal Value { get; set; } // pesha në kg (0 = trup i lirë)
+    [Range(1, 1000)] public int? Reps { get; set; }
     public DateTime? Date { get; set; }
     [MaxLength(200)] public string? Note { get; set; }
 }

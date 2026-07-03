@@ -14,10 +14,26 @@ namespace StandUpFitness.Controllers;
 public class TrainersController : ControllerBase
 {
     private readonly FitnessContext _context;
+    private readonly IWebHostEnvironment _env;
+    private static readonly string[] AllowedPhotoExtensions = { ".jpg", ".jpeg", ".png", ".webp" };
 
-    public TrainersController(FitnessContext context)
+    public TrainersController(FitnessContext context, IWebHostEnvironment env)
     {
         _context = context;
+        _env = env;
+    }
+
+    private string WebRootPath => _env.WebRootPath ?? Path.Combine(_env.ContentRootPath, "wwwroot");
+
+    private async Task<string> NewQrTokenAsync()
+    {
+        string token;
+        do
+        {
+            token = $"SUCF-{Guid.NewGuid():N}".ToUpperInvariant();
+        }
+        while (await _context.Trainers.AnyAsync(t => t.QrToken == token));
+        return token;
     }
 
     // GET: api/trainers/me -> trainer profile for the logged-in user (auto-created on first access)
@@ -37,7 +53,7 @@ public class TrainersController : ControllerBase
             var user = await _context.Users.FindAsync(userId);
             if (user == null) return NotFound();
             if (user.Role != UserRole.Trainer) return Forbid();
-            trainer = new Trainer { UserId = userId.Value };
+            trainer = new Trainer { UserId = userId.Value, QrToken = await NewQrTokenAsync() };
             _context.Trainers.Add(trainer);
             await _context.SaveChangesAsync();
             await _context.Entry(trainer).Reference(t => t.User).LoadAsync();
@@ -45,6 +61,12 @@ public class TrainersController : ControllerBase
         else if (trainer.User.Role != UserRole.Trainer)
         {
             return Forbid();
+        }
+        else if (string.IsNullOrWhiteSpace(trainer.QrToken))
+        {
+            trainer.QrToken = await NewQrTokenAsync();
+            trainer.UpdatedAt = DateTime.UtcNow;
+            await _context.SaveChangesAsync();
         }
 
         return Ok(new
@@ -54,7 +76,14 @@ public class TrainersController : ControllerBase
             trainer.User.Email,
             trainer.Specialization,
             trainer.HourlyRate,
-            trainer.IsAvailable
+            trainer.IsAvailable,
+            trainer.QrToken,
+            trainer.PhotoUrl,
+            trainer.Title,
+            trainer.Bio,
+            trainer.WorkExperience,
+            trainer.Certifications,
+            trainer.Trainings
         });
     }
 
@@ -83,6 +112,12 @@ public class TrainersController : ControllerBase
                 t.PaymentModel,
                 t.TrainerType,
                 t.IsAvailable,
+                t.PhotoUrl,
+                t.Title,
+                t.Bio,
+                t.WorkExperience,
+                t.Certifications,
+                t.Trainings,
                 ClientsCount = t.PersonalSessions.Count(),
                 t.CreatedAt
             })
@@ -119,6 +154,11 @@ public class TrainersController : ControllerBase
             trainer.PaymentModel,
             trainer.TrainerType,
             trainer.IsAvailable,
+            trainer.PhotoUrl,
+            trainer.Title,
+            trainer.WorkExperience,
+            trainer.Certifications,
+            trainer.Trainings,
             Groups = trainer.Groups.Select(g => new { g.Id, g.Name }),
             ClientsCount = trainer.PersonalSessions.Select(ps => ps.ClientId).Distinct().Count(),
             trainer.CreatedAt
@@ -153,6 +193,10 @@ public class TrainersController : ControllerBase
             CommissionPerClient = request.CommissionPerClient,
             PaymentModel = string.IsNullOrWhiteSpace(request.PaymentModel) ? "prorated" : request.PaymentModel!.Trim(),
             TrainerType = string.IsNullOrWhiteSpace(request.TrainerType) ? "employee" : request.TrainerType!.Trim(),
+            Title = request.Title?.Trim(),
+            WorkExperience = request.WorkExperience?.Trim(),
+            Certifications = request.Certifications?.Trim(),
+            Trainings = request.Trainings?.Trim(),
             IsAvailable = true
         };
 
@@ -208,11 +252,66 @@ public class TrainersController : ControllerBase
         if (!string.IsNullOrWhiteSpace(request.TrainerType))
             trainer.TrainerType = request.TrainerType.Trim();
         trainer.IsAvailable = request.IsAvailable ?? trainer.IsAvailable;
+        if (request.Title != null) trainer.Title = request.Title.Trim();
+        if (request.WorkExperience != null) trainer.WorkExperience = request.WorkExperience.Trim();
+        if (request.Certifications != null) trainer.Certifications = request.Certifications.Trim();
+        if (request.Trainings != null) trainer.Trainings = request.Trainings.Trim();
         trainer.UpdatedAt = DateTime.UtcNow;
 
         await _context.SaveChangesAsync();
 
         return Ok(new { message = "Trainer updated successfully" });
+    }
+
+    // POST: api/trainers/{id}/photo — multipart upload, jpg/png/webp up to 5MB.
+    // Admin/owner or the trainer himself may replace his own public landing photo.
+    [Authorize(Policy = "AdminTrainer")]
+    [HttpPost("{id}/photo")]
+    [RequestSizeLimit(5_000_000)]
+    public async Task<IActionResult> UploadPhoto(int id, IFormFile? file)
+    {
+        var trainer = await _context.Trainers.FirstOrDefaultAsync(t => t.Id == id);
+        if (trainer == null) return NotFound();
+
+        if (!User.CanManageCoreScope(permission: "trainers.write"))
+        {
+            var userId = User.CurrentUserId();
+            if (userId == null || trainer.UserId != userId) return Forbid();
+        }
+
+        if (file == null || file.Length == 0)
+            return BadRequest(new { message = "Zgjedh një foto." });
+        if (file.Length > 5_000_000)
+            return BadRequest(new { message = "Foto s'duhet me kalu 5MB." });
+
+        var ext = Path.GetExtension(file.FileName).ToLowerInvariant();
+        if (!AllowedPhotoExtensions.Contains(ext))
+            return BadRequest(new { message = "Formatet e lejuara: jpg, png, webp." });
+
+        var uploadsDir = Path.Combine(WebRootPath, "uploads", "trainers");
+        Directory.CreateDirectory(uploadsDir);
+
+        var fileName = $"{Guid.NewGuid():N}{ext}";
+        await using (var stream = System.IO.File.Create(Path.Combine(uploadsDir, fileName)))
+        {
+            await file.CopyToAsync(stream);
+        }
+
+        // Best-effort cleanup of the previous photo file.
+        if (!string.IsNullOrWhiteSpace(trainer.PhotoUrl))
+        {
+            var oldPath = Path.Combine(WebRootPath, trainer.PhotoUrl.TrimStart('/').Replace('/', Path.DirectorySeparatorChar));
+            if (System.IO.File.Exists(oldPath))
+            {
+                try { System.IO.File.Delete(oldPath); } catch { /* ignore */ }
+            }
+        }
+
+        trainer.PhotoUrl = $"/uploads/trainers/{fileName}";
+        trainer.UpdatedAt = DateTime.UtcNow;
+        await _context.SaveChangesAsync();
+
+        return Ok(new { photoUrl = trainer.PhotoUrl });
     }
 
     // DELETE: api/trainers/{id}
@@ -416,6 +515,11 @@ public class CreateTrainerRequest
     [Range(0, 100_000)] public decimal CommissionPerClient { get; set; }
     [MaxLength(20)] public string? PaymentModel { get; set; }
     [MaxLength(40)] public string? TrainerType { get; set; }
+    // --- Public profile shown on the landing page ---
+    [MaxLength(150)] public string? Title { get; set; }
+    [MaxLength(2000)] public string? WorkExperience { get; set; }
+    [MaxLength(2000)] public string? Certifications { get; set; }
+    [MaxLength(2000)] public string? Trainings { get; set; }
 }
 
 public class UpdateTrainerRequest
@@ -428,4 +532,8 @@ public class UpdateTrainerRequest
     public string? PaymentModel { get; set; }
     public string? TrainerType { get; set; }
     public bool? IsAvailable { get; set; }
+    [MaxLength(150)] public string? Title { get; set; }
+    [MaxLength(2000)] public string? WorkExperience { get; set; }
+    [MaxLength(2000)] public string? Certifications { get; set; }
+    [MaxLength(2000)] public string? Trainings { get; set; }
 }

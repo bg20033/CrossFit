@@ -1,4 +1,4 @@
-import { ClipboardList, Tag } from 'lucide-react'
+import { CalendarDays, ClipboardList, Tag, Users } from 'lucide-react'
 import { useState, useEffect, useMemo } from 'react'
 import { Button } from '../components/ui/button'
 import { useAuth } from '../contexts/AuthContext'
@@ -24,10 +24,32 @@ interface Package {
   price: number
   sessionsUsed: number
   sessionsTotal: number
+  durationDays: number
   autoRenew: boolean
   type: 'monthly' | 'six_month' | 'yearly' | 'session_pack'
   shared?: boolean
   sharedClients?: number
+  groups?: PackageGroup[]
+}
+
+interface PackageGroupSlot {
+  dayOfWeek: string
+  startMin: number
+  endMin: number
+}
+
+interface PackageGroup {
+  id: number
+  name: string
+  description?: string
+  trainer: string
+  dayOfWeek?: string
+  scheduleStart?: string
+  scheduleEnd?: string
+  slots?: PackageGroupSlot[]
+  maxCapacity: number
+  membersCount: number
+  isWaitlisted?: boolean
 }
 
 interface Offer {
@@ -88,6 +110,41 @@ function packageLabel(name: string): string {
   }
 }
 
+function minutesLabel(value: number): string {
+  const hours = Math.floor(value / 60)
+  const minutes = value % 60
+  return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`
+}
+
+function timeLabel(value?: string): string {
+  if (!value) return ''
+  const date = new Date(value)
+  if (!Number.isNaN(date.getTime())) {
+    return date.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })
+  }
+  return value.slice(0, 5)
+}
+
+const DAY_SHORT: Record<string, string> = {
+  Monday: 'Hën', Tuesday: 'Mar', Wednesday: 'Mër', Thursday: 'Enj',
+  Friday: 'Pre', Saturday: 'Sht', Sunday: 'Die',
+}
+const dayShort = (d?: string) => (d ? DAY_SHORT[d] ?? d : '')
+
+function groupScheduleLabel(group: PackageGroup): string {
+  // Të gjitha terminet e javës, jo vetëm i pari (grupet stërviten 2-3 herë/javë).
+  if (group.slots && group.slots.length > 0) {
+    return group.slots
+      .map((s) => `${dayShort(s.dayOfWeek)} ${minutesLabel(s.startMin)}–${minutesLabel(s.endMin)}`)
+      .join(' · ')
+  }
+  if (group.dayOfWeek && group.scheduleStart) {
+    const end = group.scheduleEnd ? `–${timeLabel(group.scheduleEnd)}` : ''
+    return `${dayShort(group.dayOfWeek)} ${timeLabel(group.scheduleStart)}${end}`
+  }
+  return 'Orari ende nuk është caktuar'
+}
+
 export default function ClientPackageStatus() {
   const { profileId } = useAuth()
   const { addNotification } = useNotification()
@@ -134,6 +191,8 @@ export default function ClientPackageStatus() {
     return Math.min(100, Math.round((current.sessionsUsed / current.sessionsTotal) * 100))
   }, [current])
 
+  const groups = current?.groups ?? []
+
   const toggleAutoRenew = async () => {
     if (!current) return
     try {
@@ -151,6 +210,7 @@ export default function ClientPackageStatus() {
       const res = await api.post('/memberships/renew', { currentId: current?.id })
       // Paketa aktivizohet pas pagesës (fatura pending) — jo menjëherë.
       addNotification('Sukses', res.data?.message || 'Fatura u krijua — paguaj në recepsion për aktivizim.', 'success')
+      await load()
     } catch {
       addNotification('Gabim', 'Rinovimi dështoi. Provo përsëri.', 'error')
     } finally {
@@ -162,6 +222,7 @@ export default function ClientPackageStatus() {
     try {
       const res = await api.post('/memberships/upgrade', { offerId: offer.id, clientId: profileId })
       addNotification('Sukses', res.data?.message || `Kërkesa për "${packageLabel(offer.name)}" u dërgua — paguaj në recepsion.`, 'success')
+      await load()
     } catch {
       addNotification('Gabim', 'Kërkesa dështoi. Provo përsëri.', 'error')
     }
@@ -267,9 +328,9 @@ export default function ClientPackageStatus() {
             {/* Right: ring chart + renew */}
             <div className="flex flex-col items-center justify-center gap-4 rounded-xl border border-gray-100 bg-gray-50/50 p-6">
               <RingChart
-                value={Math.max(0, Math.min(100, (remaining / 30) * 100))}
+                value={Math.max(0, Math.min(100, (remaining / Math.max(1, current.durationDays || 30)) * 100))}
                 label={`${remaining} ditë`}
-                sub="nga 30 ditë"
+                sub={`nga ${current.durationDays || 30} ditë`}
                 size={160}
               />
               <div className="w-full space-y-2">
@@ -285,6 +346,54 @@ export default function ClientPackageStatus() {
                 </span>
               </div>
             </div>
+          </div>
+        )}
+      </Panel>
+
+      {/* Connected groups */}
+      <Panel title="Grupet e lidhura" action={<Badge accent="blue">{groups.length}</Badge>}>
+        {loading ? (
+          <p className="py-6 text-center text-sm text-gray-400">Duke ngarkuar…</p>
+        ) : groups.length === 0 ? (
+          <EmptyState icon={<Users className="h-5 w-5" />} text="Nuk je i lidhur ende me ndonjë grup trajnimi." />
+        ) : (
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+            {groups.map((group) => (
+              <div key={group.id} className="rounded-2xl border border-gray-200 bg-white p-5">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <h3 className="font-semibold text-gray-900">{group.name}</h3>
+                    <p className="mt-1 text-sm text-gray-500">{group.description || 'Grup trajnimi'}</p>
+                  </div>
+                  {group.isWaitlisted ? <Badge accent="orange">Në pritje</Badge> : <Badge accent="green">Aktiv</Badge>}
+                </div>
+                <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
+                  <div className="rounded-xl bg-gray-50 p-3">
+                    <p className="text-xs text-gray-400">Trajneri</p>
+                    <p className="mt-1 text-sm font-semibold text-gray-800">{group.trainer}</p>
+                  </div>
+                  <div className="rounded-xl bg-gray-50 p-3 sm:col-span-2">
+                    <p className="text-xs text-gray-400">Orari</p>
+                    <p className="mt-1 flex items-center gap-1 text-sm font-semibold text-gray-800">
+                      <CalendarDays className="h-4 w-4 text-gray-400" />
+                      {groupScheduleLabel(group)}
+                    </p>
+                  </div>
+                </div>
+                <div className="mt-4">
+                  <div className="mb-2 flex items-center justify-between text-sm">
+                    <span className="text-gray-500">Kapaciteti</span>
+                    <span className="font-semibold text-gray-800">{group.membersCount}/{group.maxCapacity}</span>
+                  </div>
+                  <div className="h-2 w-full overflow-hidden rounded-full bg-gray-100">
+                    <div
+                      className="h-full rounded-full bg-teal-500"
+                      style={{ width: `${Math.min(100, Math.round((group.membersCount / Math.max(1, group.maxCapacity)) * 100))}%` }}
+                    />
+                  </div>
+                </div>
+              </div>
+            ))}
           </div>
         )}
       </Panel>

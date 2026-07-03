@@ -13,10 +13,12 @@ namespace StandUpFitness.Controllers;
 public class TrainingGroupsController : ControllerBase
 {
     private readonly FitnessContext _context;
+    private readonly IGymTimeService _gymTime;
 
-    public TrainingGroupsController(FitnessContext context)
+    public TrainingGroupsController(FitnessContext context, IGymTimeService gymTime)
     {
         _context = context;
+        _gymTime = gymTime;
     }
 
     // GET: api/traininggroups
@@ -132,6 +134,11 @@ public class TrainingGroupsController : ControllerBase
         _context.TrainingGroups.Add(group);
         await _context.SaveChangesAsync();
 
+        // Materialize dated sessions right away — don't make the admin wait for
+        // GroupSessionGeneratorService's next daily tick to see them show up.
+        await GroupSessionGenerator.GenerateForGroupAsync(_context, group, _gymTime.LocalNow.Date);
+        await _context.SaveChangesAsync();
+
         return Ok(new { message = "Group created successfully", id = group.Id });
     }
 
@@ -183,6 +190,14 @@ public class TrainingGroupsController : ControllerBase
         }
 
         group.UpdatedAt = DateTime.UtcNow;
+        await _context.SaveChangesAsync();
+
+        // Re-materialize sessions for the (possibly new) weekly slots immediately.
+        // Note: this only ADDS sessions for slots that don't have one yet in the
+        // horizon — it doesn't retroactively delete/rewrite sessions already
+        // generated under a schedule that just changed (same limitation as the
+        // manual "Gjenero seancat" button).
+        await GroupSessionGenerator.GenerateForGroupAsync(_context, group, _gymTime.LocalNow.Date);
         await _context.SaveChangesAsync();
 
         return Ok(new { message = "Group updated successfully" });

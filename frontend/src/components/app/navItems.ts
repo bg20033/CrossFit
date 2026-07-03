@@ -99,9 +99,9 @@ function roleNav(role: UserRole | undefined): NavItem[] {
       return [
         dashboard,
         { to: '/trainer/groups', label: 'Grupet', icon: CalendarDays },
-        { to: '/trainer/workout-builder', label: 'Ushtrimet', icon: Dumbbell },
         { to: '/trainer/diets', label: 'Dietat', icon: UtensilsCrossed },
         { to: '/trainer/clients', label: 'Klientët', icon: Users },
+        { to: '/trainer/qr-card', label: 'Kartela QR', icon: IdCard },
       ]
     case 'staff':
       return [
@@ -137,7 +137,6 @@ function roleNav(role: UserRole | undefined): NavItem[] {
       return [
         dashboard,
         { to: '/calendar', label: 'Kalendari', icon: CalendarDays },
-        { to: '/workouts', label: 'Ushtrimet', icon: Dumbbell },
         { to: '/diet', label: 'Dieta', icon: UtensilsCrossed },
         { to: '/nutrition', label: 'Ushqimi', icon: Apple },
         { to: '/package', label: 'Anëtarësimi', icon: CreditCard },
@@ -172,13 +171,12 @@ export function titleForPath(pathname: string): string {
     '/admin/invoices': 'Faturat',
     '/admin/rentals': 'Qiragjinjtë',
     '/trainer/groups': 'Grupet',
-    '/trainer/workout-builder': 'Krijo Ushtrime',
     '/trainer/diets': 'Planet e Dietës',
     '/admin/reports': 'Raporte',
     '/trainer/clients': 'Klientët e mi',
+    '/trainer/qr-card': 'Kartela QR e Trajnerit',
     '/package': 'Anëtarësimi im',
     '/qr-card': 'Kartela e Anëtarit',
-    '/workouts': 'Ushtrimet e mia',
     '/diet': 'Dieta ime',
     '/nutrition': 'Ushqimi & Kaloritë',
     '/onboarding': 'Konfigurimi i Profilit',

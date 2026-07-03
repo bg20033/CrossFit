@@ -225,9 +225,39 @@ public class PaymentsController : ControllerBase
         receiptUrl = $"/api/payments/{tx.Id}/receipt"
     };
 
+    // POST: api/payments/{id}/mark-paid — settle a debt (borgj): a POS sale that
+    // was recorded with AsDebt=true stays as a "pending" PaymentTransaction/Invoice
+    // until the client actually pays. This runs the exact same paid-effects path
+    // as a normal checkout (Finance income, membership activation, GAP-7 enroll)
+    // so a settled debt books identically to a same-day cash sale.
+    [HttpPost("{id:int}/mark-paid")]
+    public async Task<IActionResult> MarkPaid(int id, [FromBody] SettleDebtRequest request)
+    {
+        var tx = await _context.PaymentTransactions
+            .Include(p => p.Invoice).ThenInclude(i => i!.Items)
+            .FirstOrDefaultAsync(p => p.Id == id);
+        if (tx == null) return NotFound();
+        if (tx.Status == "paid") return Ok(new { message = "Tashmë e paguar", idempotent = true });
+        if (tx.Status != "pending") return BadRequest(new { message = $"Transaksioni është {tx.Status} dhe nuk mund të shënohet i paguar." });
+
+        request ??= new SettleDebtRequest();
+        if (!string.IsNullOrWhiteSpace(request.Method))
+            tx.Method = request.Method;
+
+        await ApplyPaidEffectsAsync(tx, tx.Invoice);
+
+        tx.Status = "paid";
+        tx.UpdatedAt = DateTime.UtcNow;
+        tx.ReceiptHtml = BuildReceiptHtml(tx, tx.Invoice);
+
+        await _context.SaveChangesAsync();
+        return Ok(Shape(tx));
+    }
+
     // POST: api/payments/pos-checkout
-    // Cash-register product sale: creates a paid invoice, books the income,
-    // records the payment transaction, and decrements stock atomically.
+    // Cash-register product sale: creates a paid invoice (or, when AsDebt=true, a
+    // pending "borgj" invoice the client still owes), books the income for paid
+    // sales, records the payment transaction, and decrements stock atomically.
     [HttpPost("pos-checkout")]
     public async Task<IActionResult> PosCheckout([FromBody] PosCheckoutRequest request)
     {
@@ -293,7 +323,7 @@ public class PaymentsController : ControllerBase
             Amount = invoice.TotalAmount,
             Currency = "EUR",
             Method = request.Method,
-            Status = "paid",
+            Status = request.AsDebt ? "pending" : "paid",
             Provider = "manual",
             ReceiptNumber = receiptNumber,
             IdempotencyKey = request.IdempotencyKey
@@ -301,8 +331,14 @@ public class PaymentsController : ControllerBase
         tx.ReceiptHtml = BuildReceiptHtml(tx, invoice);
         _context.PaymentTransactions.Add(tx);
 
-        var (applied, error) = await _invoicePayments.MarkPaidAsync(invoice, request.Method, User.CurrentUserId());
-        if (error != null) return BadRequest(new { message = error });
+        // Debt sales leave the invoice pending — no Finance income until it's
+        // settled via /{id}/mark-paid, otherwise reports would count unpaid debt
+        // as revenue. Stock still leaves the shelf either way.
+        if (!request.AsDebt)
+        {
+            var (applied, error) = await _invoicePayments.MarkPaidAsync(invoice, request.Method, User.CurrentUserId());
+            if (error != null) return BadRequest(new { message = error });
+        }
 
         try
         {
@@ -364,6 +400,14 @@ public class PosCheckoutRequest
     [Required, MaxLength(30)] public string Method { get; set; } = "cash";
     public List<PosCheckoutItem> Items { get; set; } = new();
     [MaxLength(120)] public string? IdempotencyKey { get; set; }
+    // true = record as borgj (debt): invoice/transaction stay "pending" until
+    // settled via POST /api/payments/{id}/mark-paid.
+    public bool AsDebt { get; set; } = false;
+}
+
+public class SettleDebtRequest
+{
+    [MaxLength(30)] public string? Method { get; set; }
 }
 
 public class PosCheckoutItem

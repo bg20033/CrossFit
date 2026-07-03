@@ -1,4 +1,4 @@
-import { CalendarDays, Flame, Megaphone, TrendingUp } from 'lucide-react'
+import { CalendarDays, Flame, Megaphone, TrendingUp, Users } from 'lucide-react'
 import { useState, useEffect } from 'react'
 import { useAuth } from '../contexts/AuthContext'
 import api from '../utils/api'
@@ -29,11 +29,33 @@ interface GymNotice {
   startsAt: string
   endsAt?: string | null
 }
+interface MyGroupSlot { dayOfWeek: string; startMin: number; endMin: number }
+interface MyGroupException {
+  date: string
+  startMin: number
+  endMin: number
+  status: string // cancelled | postponed | (scheduled/held not sent — only exceptions come through)
+  reason?: string | null
+  postponedToDate?: string | null
+  substituteTrainer?: string | null
+}
+interface MyGroup {
+  id: number
+  name: string
+  trainer: string
+  slots?: MyGroupSlot[]
+  isWaitlisted?: boolean
+  exceptions?: MyGroupException[]
+}
 
 const MONTHS = ['Janar', 'Shkurt', 'Mars', 'Prill', 'Maj', 'Qershor', 'Korrik', 'Gusht', 'Shtator', 'Tetor', 'Nëntor', 'Dhjetor']
 const WD = ['Hën', 'Mar', 'Mër', 'Enj', 'Pre', 'Sht', 'Die']
 const todayStr = new Date().toISOString().slice(0, 10)
 const NOTICE_TYPES: Record<string, string> = { announcement: 'Njoftim', closure: 'Mbyllje', reschedule: 'Shtyrje' }
+// Indeksi i ditës (Hën=0…Die=6) nga emrat anglisht të slots-ave.
+const DAY_IDX: Record<string, number> = { Monday: 0, Tuesday: 1, Wednesday: 2, Thursday: 3, Friday: 4, Saturday: 5, Sunday: 6 }
+const hhmm = (m: number) => `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`
+const STATUS_AL: Record<string, string> = { cancelled: 'Anuluar', postponed: 'Shtyrë' }
 
 export default function ClientCalendar() {
   const { profileId } = useAuth()
@@ -42,6 +64,7 @@ export default function ClientCalendar() {
   const [data, setData] = useState<Summary | null>(null)
   const [selected, setSelected] = useState<Day | null>(null)
   const [notices, setNotices] = useState<GymNotice[]>([])
+  const [myGroups, setMyGroups] = useState<MyGroup[]>([])
 
   const downloadIcs = async () => {
     const res = await api.get('/calendar/me.ics', { responseType: 'blob' })
@@ -67,6 +90,49 @@ export default function ClientCalendar() {
       .then((r) => setNotices(r.data ?? []))
       .catch(() => setNotices([]))
   }, [])
+
+  // Grupet e klientit — kalendari lidhet me orarin real të grupeve të tij.
+  useEffect(() => {
+    if (profileId == null) return
+    api
+      .get(`/memberships/current?clientId=${profileId}`)
+      .then((r) => setMyGroups(Array.isArray(r.data?.groups) ? r.data.groups : []))
+      .catch(() => setMyGroups([]))
+  }, [profileId])
+
+  // Orari javor i grupeve: [dita 0-6] → seancat e asaj dite (pa waitlist).
+  const weekSchedule = (() => {
+    const byDay: { day: number; group: string; trainer: string; startMin: number; endMin: number }[] = []
+    for (const g of myGroups) {
+      if (g.isWaitlisted) continue
+      for (const s of g.slots ?? []) {
+        const idx = DAY_IDX[s.dayOfWeek]
+        if (idx != null) byDay.push({ day: idx, group: g.name, trainer: g.trainer, startMin: s.startMin, endMin: s.endMin })
+      }
+    }
+    return byDay.sort((a, b) => a.day - b.day || a.startMin - b.startMin)
+  })()
+  const groupWeekdays = new Set(weekSchedule.map((s) => s.day))
+
+  // Ekuacionet e sotme/të ardhshme (anuluar/shtyrë) — trajneri/admini i ndryshoi
+  // për një datë konkrete, kalendari s'duhet me e përsëritur thjesht orarin javor.
+  const upcomingExceptions = (() => {
+    const out: { groupName: string; date: string; startMin: number; endMin: number; status: string; reason?: string | null; postponedToDate?: string | null; substituteTrainer?: string | null }[] = []
+    for (const g of myGroups) {
+      if (g.isWaitlisted) continue
+      for (const ex of g.exceptions ?? []) {
+        out.push({ groupName: g.name, ...ex })
+      }
+    }
+    return out.sort((a, b) => a.date.localeCompare(b.date))
+  })()
+  const exceptionsByDate = new Map<string, typeof upcomingExceptions>()
+  for (const ex of upcomingExceptions) {
+    const ds = ex.date.slice(0, 10)
+    const list = exceptionsByDate.get(ds) ?? []
+    list.push(ex)
+    exceptionsByDate.set(ds, list)
+  }
 
   const byDate = new Map((data?.days ?? []).map((d) => [d.date, d]))
   const daysInMonth = new Date(cursor.year, cursor.month, 0).getDate()
@@ -143,6 +209,51 @@ export default function ClientCalendar() {
         )}
       </Panel>
 
+      <Panel title="Orari i grupeve të mia" action={<Badge accent="teal">{myGroups.filter((g) => !g.isWaitlisted).length}</Badge>}>
+        {weekSchedule.length === 0 ? (
+          <EmptyState icon={<Users className="h-5 w-5" />} text="S'je i lidhur ende me ndonjë grup — kontakto recepsionin ose trajnerin." />
+        ) : (
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {weekSchedule.map((s, i) => (
+              <div key={i} className="flex items-center gap-3 rounded-xl border border-gray-200 p-3.5">
+                <span className="flex h-11 w-11 shrink-0 flex-col items-center justify-center rounded-lg bg-teal-50 text-teal-700">
+                  <span className="text-[11px] font-bold uppercase">{WD[s.day]}</span>
+                </span>
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-semibold text-gray-900">{s.group}</p>
+                  <p className="text-xs text-gray-500">{hhmm(s.startMin)}–{hhmm(s.endMin)} · me {s.trainer}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+        {myGroups.some((g) => g.isWaitlisted) && (
+          <p className="mt-3 text-xs text-gray-400">
+            Në pritje: {myGroups.filter((g) => g.isWaitlisted).map((g) => g.name).join(', ')} — të njoftojmë kur lirohet vend.
+          </p>
+        )}
+        {upcomingExceptions.length > 0 && (
+          <div className="mt-4 space-y-2 border-t border-gray-100 pt-4">
+            <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">Ndryshime në 14 ditët e ardhshme</p>
+            {upcomingExceptions.map((ex, i) => (
+              <div
+                key={i}
+                className={`rounded-lg border px-3 py-2 text-xs ${
+                  ex.status === 'cancelled' ? 'border-gray-200 bg-gray-50 text-gray-500' : 'border-amber-200 bg-amber-50 text-amber-800'
+                }`}
+              >
+                <span className="font-semibold">{ex.groupName}</span> ·{' '}
+                {new Date(`${ex.date.slice(0, 10)}T12:00:00`).toLocaleDateString('sq-AL', { weekday: 'short', day: '2-digit', month: 'short' })}{' '}
+                {hhmm(ex.startMin)}–{hhmm(ex.endMin)} — {STATUS_AL[ex.status] ?? ex.status}
+                {ex.postponedToDate ? ` → ${new Date(ex.postponedToDate).toLocaleDateString('sq-AL', { day: '2-digit', month: '2-digit' })}` : ''}
+                {ex.substituteTrainer ? ` · zëvendësim: ${ex.substituteTrainer}` : ''}
+                {ex.reason ? ` · ${ex.reason}` : ''}
+              </div>
+            ))}
+          </div>
+        )}
+      </Panel>
+
       <Panel title="Kjo javë">
         <DayStrip year={cursor.year} month={cursor.month} marked={markedDays} today={todayStr} />
         {weekBars.some((b) => b.value > 0) && (
@@ -177,28 +288,49 @@ export default function ClientCalendar() {
             const ds = dateStr(day)
             const att = byDate.get(ds)
             const isToday = ds === todayStr
+            // Ditë grupi: kjo datë bie në ditën javore të një grupi të klientit
+            // (shënohet vetëm sot e në të ardhmen — e kaluara flet me prezencë).
+            const wd = (new Date(`${ds}T12:00:00`).getDay() + 6) % 7
+            const isGroupDay = ds >= todayStr && groupWeekdays.has(wd)
+            const dayExceptions = exceptionsByDate.get(ds) ?? []
+            const isCancelled = dayExceptions.some((e) => e.status === 'cancelled')
+            const isPostponed = !isCancelled && dayExceptions.some((e) => e.status === 'postponed')
+            const isException = isCancelled || isPostponed
             return (
               <button
                 key={ds}
                 onClick={() => att && setSelected(att)}
+                title={isException ? dayExceptions.map((e) => `${e.groupName}: ${STATUS_AL[e.status] ?? e.status}${e.postponedToDate ? ` → ${e.postponedToDate.slice(0, 10)}` : ''}`).join(' · ') : undefined}
                 className={`flex aspect-square flex-col items-center justify-center rounded-xl border text-sm transition ${
                   att
                     ? 'border-coral-500 bg-coral-500 text-white'
                     : isToday
                     ? 'border-coral-400 text-coral-600'
+                    : isCancelled
+                    ? 'border-gray-300 bg-gray-100 text-gray-400 line-through decoration-gray-400'
+                    : isPostponed
+                    ? 'border-amber-300 bg-amber-50 text-amber-700 hover:bg-amber-100'
+                    : isGroupDay
+                    ? 'border-teal-200 bg-teal-50/60 text-gray-600 hover:bg-teal-50'
                     : 'border-gray-100 text-gray-500 hover:bg-gray-50'
                 }`}
               >
                 <span className={att ? 'font-semibold' : ''}>{day}</span>
                 {att && <span className="text-[10px]">{att.count > 1 ? `×${att.count}` : ''}</span>}
+                {!att && isGroupDay && !isException && <span className="mt-0.5 h-1.5 w-1.5 rounded-full bg-teal-500" />}
+                {!att && isCancelled && <span className="mt-0.5 h-1.5 w-1.5 rounded-full bg-gray-400" />}
+                {!att && isPostponed && <span className="mt-0.5 h-1.5 w-1.5 rounded-full bg-amber-500" />}
               </button>
             )
           })}
         </div>
 
-        <div className="mt-4 flex items-center gap-4 text-xs text-gray-500">
+        <div className="mt-4 flex flex-wrap items-center gap-4 text-xs text-gray-500">
           <span className="flex items-center gap-1.5"><span className="h-3 w-3 rounded bg-coral-500" /> Ardhur</span>
           <span className="flex items-center gap-1.5"><span className="h-3 w-3 rounded border border-coral-400" /> Sot</span>
+          <span className="flex items-center gap-1.5"><span className="h-3 w-3 rounded border border-teal-200 bg-teal-50" /> Ditë grupi</span>
+          <span className="flex items-center gap-1.5"><span className="h-3 w-3 rounded border border-amber-300 bg-amber-50" /> Shtyrë</span>
+          <span className="flex items-center gap-1.5"><span className="h-3 w-3 rounded border border-gray-300 bg-gray-100" /> Anuluar</span>
         </div>
 
         {selected && (

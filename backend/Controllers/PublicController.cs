@@ -8,8 +8,9 @@ namespace StandUpFitness.Controllers;
 
 /// <summary>
 /// Të dhëna publike për faqen e marketingut (landing) — pa autentikim.
-/// Ekspozon VETËM fusha jo-sensitive: emra trajnerësh + specializime dhe
-/// pakot aktive me çmim/kohëzgjatje. Kurrë email, tarifa orare a komisione.
+/// Ekspozon VETËM fusha jo-sensitive: emra trajnerësh, specializim, titull,
+/// foto, bio, përvojë pune, çertifikata, trajnime, dhe pakot aktive me
+/// çmim/kohëzgjatje. Kurrë email, tarifa orare a komisione.
 /// </summary>
 [ApiController]
 [Route("api/public")]
@@ -31,7 +32,13 @@ public class PublicController : ControllerBase
                 t.Id,
                 t.User.Name,
                 t.Specialization,
-                t.TrainerType
+                t.TrainerType,
+                t.PhotoUrl,
+                t.Title,
+                t.Bio,
+                t.WorkExperience,
+                t.Certifications,
+                t.Trainings
             })
             .ToListAsync();
 

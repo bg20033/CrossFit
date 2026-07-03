@@ -34,10 +34,9 @@ const Payroll = lazy(() => import('./pages/Payroll'))
 const AdminTrainerPayments = lazy(() => import('./pages/AdminTrainerPayments'))
 const TrainerDashboard = lazy(() => import('./pages/TrainerDashboard'))
 const TrainerGroups = lazy(() => import('./pages/TrainerGroups'))
-const TrainerWorkoutBuilder = lazy(() => import('./pages/TrainerWorkoutBuilder'))
 const TrainerDiets = lazy(() => import('./pages/TrainerDiets'))
 const TrainerClients = lazy(() => import('./pages/TrainerClients'))
-const ClientWorkouts = lazy(() => import('./pages/ClientWorkouts'))
+const TrainerQrCard = lazy(() => import('./pages/TrainerQrCard'))
 const ClientDiet = lazy(() => import('./pages/ClientDiet'))
 const ClientGoals = lazy(() => import('./pages/ClientGoals'))
 const ClientProgress = lazy(() => import('./pages/ClientProgress'))
@@ -153,9 +152,9 @@ function App() {
                 <Route element={<ProtectedRoute allowedRoles={['trainer', 'admin', 'gym_owner']} />}>
                   <Route path="/trainer" element={<TrainerDashboard />} />
                   <Route path="/trainer/groups" element={<TrainerGroups />} />
-                  <Route path="/trainer/workout-builder" element={<TrainerWorkoutBuilder />} />
                   <Route path="/trainer/diets" element={<TrainerDiets />} />
                   <Route path="/trainer/clients" element={<TrainerClients />} />
+                  <Route path="/trainer/qr-card" element={<TrainerQrCard />} />
                 </Route>
 
                 {/* Client + Tenant-client shared nutrition screens */}
@@ -167,7 +166,6 @@ function App() {
 
                 {/* Client only */}
                 <Route element={<ProtectedRoute allowedRoles={['client']} />}>
-                  <Route path="/workouts" element={<ClientWorkouts />} />
                   <Route path="/diet" element={<ClientDiet />} />
                   <Route path="/goals" element={<ClientGoals />} />
                   <Route path="/progress" element={<ClientProgress />} />

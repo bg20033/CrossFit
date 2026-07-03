@@ -86,9 +86,8 @@ export default function TrainerDashboard() {
       </div>
 
       <Panel title="Aksione të shpejta">
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
           <QuickAction to="/trainer/groups" icon={<Library className="h-5 w-5" />} label="Grupet" accent="green" />
-          <QuickAction to="/trainer/workout-builder" icon={<Dumbbell className="h-5 w-5" />} label="Krijo Ushtrime" accent="purple" />
           <QuickAction to="/trainer/diets" icon={<UtensilsCrossed className="h-5 w-5" />} label="Dietat" accent="orange" />
           <QuickAction to="/trainer/clients" icon={<Users className="h-5 w-5" />} label="Klientët" accent="blue" />
         </div>

@@ -113,6 +113,17 @@ export default function AdminCashRegister() {
     setLoading(false)
   }
 
+  const markPaid = async (tx: Tx) => {
+    if (!window.confirm(`Shëno kuponin ${tx.receiptNumber ?? tx.id} si të paguar (${eur(tx.amount)})?`)) return
+    try {
+      await api.post(`/payments/${tx.id}/mark-paid`, {})
+      addNotification('Sukses', 'Borgji u shënua i paguar.', 'success')
+      load()
+    } catch (err: any) {
+      addNotification('Gabim', err.response?.data?.message || 'Nuk u arrit të shënohej i paguar.', 'error')
+    }
+  }
+
   const refund = async (tx: Tx) => {
     const raw = window.prompt(`Shuma për rimbursim (max ${tx.amount}€):`, String(tx.amount))
     if (raw == null) return
@@ -187,7 +198,7 @@ export default function AdminCashRegister() {
     [cart]
   )
 
-  const checkout = async () => {
+  const checkout = async (asDebt = false) => {
     if (!current) return
     if (!clientId) {
       addNotification('Gabim', 'Zgjedh klientin për shitjen.', 'error')
@@ -204,13 +215,20 @@ export default function AdminCashRegister() {
         method: paymentMethod,
         items: cart.map((i) => ({ productId: i.product.id, quantity: i.quantity })),
         idempotencyKey: `pos-${current.id}-${Date.now()}`,
+        asDebt,
       })
-      addNotification('Sukses', `Pagesa u regjistrua. Kuponi: ${res.data.receiptNumber}`, 'success')
+      addNotification(
+        'Sukses',
+        asDebt
+          ? `U shtua si borgj. Kuponi: ${res.data.receiptNumber}`
+          : `Pagesa u regjistrua. Kuponi: ${res.data.receiptNumber}`,
+        'success'
+      )
       setCart([])
       setClientId('')
       load()
     } catch (err: any) {
-      addNotification('Gabim', err.response?.data?.message || 'Pagesa dështoi.', 'error')
+      addNotification('Gabim', err.response?.data?.message || (asDebt ? 'Shtimi si borgj dështoi.' : 'Pagesa dështoi.'), 'error')
     } finally {
       setPosLoading(false)
     }
@@ -326,19 +344,25 @@ export default function AdminCashRegister() {
                   <span>Totali</span>
                   <span>{eur(cartTotal)}</span>
                 </div>
+                <Field label="Metoda e pagesës">
+                  <select value={paymentMethod} onChange={(e) => setPaymentMethod(e.target.value)} className={fieldCls}>
+                    <option value="cash">Kontant</option>
+                    <option value="card">Kartë</option>
+                    <option value="transfer">Transfertë</option>
+                  </select>
+                </Field>
                 <div className="grid grid-cols-2 gap-3">
-                  <Field label="Metoda e pagesës">
-                    <select value={paymentMethod} onChange={(e) => setPaymentMethod(e.target.value)} className={fieldCls}>
-                      <option value="cash">Kontant</option>
-                      <option value="card">Kartë</option>
-                      <option value="transfer">Transfertë</option>
-                    </select>
-                  </Field>
-                  <div className="flex items-end">
-                    <Button onClick={checkout} disabled={posLoading || cart.length === 0} className={`w-full ${primaryBtn}`}>
-                      {posLoading ? 'Duke përpunuar…' : `Paguaj ${eur(cartTotal)}`}
-                    </Button>
-                  </div>
+                  <Button
+                    variant="outline"
+                    onClick={() => checkout(true)}
+                    disabled={posLoading || cart.length === 0}
+                    className="w-full"
+                  >
+                    {posLoading ? 'Duke përpunuar…' : `Shto si borgj (${eur(cartTotal)})`}
+                  </Button>
+                  <Button onClick={() => checkout(false)} disabled={posLoading || cart.length === 0} className={`w-full ${primaryBtn}`}>
+                    {posLoading ? 'Duke përpunuar…' : `Paguaj ${eur(cartTotal)}`}
+                  </Button>
                 </div>
               </div>
             </div>
@@ -393,11 +417,16 @@ export default function AdminCashRegister() {
                     <td className="px-3 py-3 font-medium text-gray-800">{eur(t.amount)}</td>
                     <td className="px-3 py-3 text-gray-600">{t.method}</td>
                     <td className="px-3 py-3">
-                      <Badge accent={t.status === 'paid' ? 'green' : t.status === 'refunded' ? 'gray' : 'gray'}>{t.status}</Badge>
+                      <Badge accent={t.status === 'paid' ? 'green' : 'gray'}>
+                        {t.status === 'paid' ? 'Paguar' : t.status === 'pending' ? 'Borgj' : t.status === 'refunded' ? 'Rimbursuar' : t.status}
+                      </Badge>
                     </td>
                     <td className="px-3 py-3 text-right">
                       {t.status === 'paid' && t.amount > 0 && (
                         <Button size="sm" variant="outline" onClick={() => refund(t)}>Rimbursim</Button>
+                      )}
+                      {t.status === 'pending' && (
+                        <Button size="sm" className={primaryBtn} onClick={() => markPaid(t)}>Shëno të paguar</Button>
                       )}
                     </td>
                   </tr>

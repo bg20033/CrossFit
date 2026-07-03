@@ -217,10 +217,186 @@ public class MessagesController : ControllerBase
         await _context.SaveChangesAsync();
         return Ok(new { message = "Sent", id = message.Id, sentAt = message.SentAt });
     }
+
+    // --- Group chat: one shared thread per TrainingGroup (GroupMessage), not a
+    // fan-out of individual DirectMessages — the trainer, its clients, and
+    // admin/staff (schedule.write) all read and post into the same thread. ---
+
+    // Groups the current user may read/post in: admin/staff (schedule.write) → all
+    // groups; trainer → his own groups; client (or anyone else) → groups they're in.
+    private async Task<List<int>> AccessibleGroupIdsAsync(int userId)
+    {
+        if (User.CanManageCoreScope(permission: "schedule.write"))
+            return await _context.TrainingGroups.Select(g => g.Id).ToListAsync();
+
+        if (User.IsInRole(nameof(UserRole.Trainer)))
+        {
+            var trainerId = await _context.CurrentCoreTrainerIdAsync(User);
+            if (trainerId == null) return new List<int>();
+            return await _context.TrainingGroups.Where(g => g.TrainerId == trainerId.Value).Select(g => g.Id).ToListAsync();
+        }
+
+        return await _context.Clients
+            .Where(c => c.UserId == userId)
+            .SelectMany(c => c.Groups.Select(g => g.Id))
+            .Distinct()
+            .ToListAsync();
+    }
+
+    private async Task<bool> CanAccessGroupChatAsync(int userId, int groupId)
+    {
+        var ids = await AccessibleGroupIdsAsync(userId);
+        return ids.Contains(groupId);
+    }
+
+    // GET: api/messages/groups — every group chat the user can see, with a last-message
+    // preview and unread count (unread = messages after their GroupMessageRead pointer).
+    [HttpGet("groups")]
+    public async Task<IActionResult> Groups()
+    {
+        var userId = User.CurrentUserId();
+        if (userId == null) return Unauthorized();
+
+        var groupIds = await AccessibleGroupIdsAsync(userId.Value);
+        if (groupIds.Count == 0) return Ok(Array.Empty<object>());
+
+        var groups = await _context.TrainingGroups
+            .Where(g => groupIds.Contains(g.Id))
+            .Select(g => new { g.Id, g.Name, MembersCount = g.Clients.Count() })
+            .ToListAsync();
+
+        var lastMessages = await _context.GroupMessages
+            .Where(m => groupIds.Contains(m.TrainingGroupId))
+            .GroupBy(m => m.TrainingGroupId)
+            .Select(g => g.OrderByDescending(m => m.SentAt).First())
+            .ToListAsync();
+        var lastByGroup = lastMessages.ToDictionary(m => m.TrainingGroupId);
+
+        var readRows = await _context.GroupMessageReads
+            .Where(r => r.UserId == userId.Value && groupIds.Contains(r.TrainingGroupId))
+            .ToListAsync();
+        var readByGroup = readRows.ToDictionary(r => r.TrainingGroupId, r => r.LastReadAt);
+
+        var result = new List<object>();
+        foreach (var g in groups)
+        {
+            var since = readByGroup.TryGetValue(g.Id, out var t) ? t : DateTime.MinValue;
+            var unread = await _context.GroupMessages.CountAsync(m =>
+                m.TrainingGroupId == g.Id && m.SenderUserId != userId.Value && m.SentAt > since);
+
+            lastByGroup.TryGetValue(g.Id, out var last);
+            result.Add(new
+            {
+                groupId = g.Id,
+                groupName = g.Name,
+                membersCount = g.MembersCount,
+                lastMessage = last?.Body,
+                sentAt = last?.SentAt,
+                unread
+            });
+        }
+
+        return Ok(result.OrderByDescending(r => ((dynamic)r).sentAt ?? DateTime.MinValue).ToList());
+    }
+
+    // GET: api/messages/groups/{groupId}/thread — full thread, marks it read for the caller.
+    [HttpGet("groups/{groupId:int}/thread")]
+    public async Task<IActionResult> GroupThread(int groupId)
+    {
+        var userId = User.CurrentUserId();
+        if (userId == null) return Unauthorized();
+        if (!await CanAccessGroupChatAsync(userId.Value, groupId)) return Forbid();
+
+        var messages = await _context.GroupMessages
+            .Where(m => m.TrainingGroupId == groupId)
+            .OrderBy(m => m.SentAt)
+            .Select(m => new
+            {
+                m.Id,
+                m.SenderUserId,
+                SenderName = m.Sender.Name,
+                m.Body,
+                m.SentAt,
+                Mine = m.SenderUserId == userId
+            })
+            .Take(300)
+            .ToListAsync();
+
+        var read = await _context.GroupMessageReads.FirstOrDefaultAsync(r => r.TrainingGroupId == groupId && r.UserId == userId.Value);
+        if (read == null)
+            _context.GroupMessageReads.Add(new GroupMessageRead { TrainingGroupId = groupId, UserId = userId.Value, LastReadAt = DateTime.UtcNow });
+        else
+            read.LastReadAt = DateTime.UtcNow;
+        await _context.SaveChangesAsync();
+
+        return Ok(messages);
+    }
+
+    // POST: api/messages/groups/{groupId} — post into the shared group thread.
+    [HttpPost("groups/{groupId:int}")]
+    public async Task<IActionResult> PostToGroup(int groupId, [FromBody] SendGroupMessageRequest request)
+    {
+        var userId = User.CurrentUserId();
+        if (userId == null) return Unauthorized();
+        if (!await CanAccessGroupChatAsync(userId.Value, groupId)) return Forbid();
+
+        var group = await _context.TrainingGroups
+            .Include(g => g.Clients).ThenInclude(c => c.User)
+            .Include(g => g.Trainer).ThenInclude(t => t.User)
+            .FirstOrDefaultAsync(g => g.Id == groupId);
+        if (group == null) return NotFound(new { message = "Grupi nuk u gjet" });
+
+        var body = request.Body?.Trim();
+        if (string.IsNullOrWhiteSpace(body))
+            return BadRequest(new { message = "Mesazhi është bosh." });
+
+        var message = new GroupMessage
+        {
+            TrainingGroupId = groupId,
+            SenderUserId = userId.Value,
+            Body = body
+        };
+        _context.GroupMessages.Add(message);
+
+        // Sender's own thread shouldn't show their message as unread.
+        var ownRead = await _context.GroupMessageReads.FirstOrDefaultAsync(r => r.TrainingGroupId == groupId && r.UserId == userId.Value);
+        if (ownRead == null)
+            _context.GroupMessageReads.Add(new GroupMessageRead { TrainingGroupId = groupId, UserId = userId.Value, LastReadAt = message.SentAt });
+        else
+            ownRead.LastReadAt = message.SentAt;
+
+        var preview = body.Length > 120 ? body[..120] + "..." : body;
+        var recipientUserIds = group.Clients
+            .Where(c => c.User.IsActive)
+            .Select(c => c.UserId)
+            .Append(group.Trainer.UserId)
+            .Where(uid => uid != userId.Value)
+            .Distinct();
+
+        foreach (var uid in recipientUserIds)
+        {
+            _context.UserNotifications.Add(new UserNotification
+            {
+                UserId = uid,
+                Title = $"Mesazh i ri — {group.Name}",
+                Message = preview,
+                Type = "info",
+                Link = "/messages"
+            });
+        }
+
+        await _context.SaveChangesAsync();
+        return Ok(new { message = "Sent", id = message.Id, sentAt = message.SentAt, groupId, groupName = group.Name });
+    }
 }
 
 public class SendMessageRequest
 {
     public int ReceiverUserId { get; set; }
+    [Required, MaxLength(4000)] public string Body { get; set; } = null!;
+}
+
+public class SendGroupMessageRequest
+{
     [Required, MaxLength(4000)] public string Body { get; set; } = null!;
 }
