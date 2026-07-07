@@ -281,7 +281,11 @@ app.Use(async (context, next) =>
         headers.TryAdd("X-Content-Type-Options", "nosniff");
         headers.TryAdd("X-Frame-Options", "DENY");
         headers.TryAdd("Referrer-Policy", "no-referrer");
-        headers.TryAdd("Permissions-Policy", "camera=(), microphone=(), geolocation=()");
+        // camera=(self) lets the QR scanner (Arka access page) use getUserMedia on
+        // our own origin. "camera=()" allowed NO origin at all, which silently
+        // blocked the camera in production (getUserMedia -> NotAllowedError) even
+        // though it worked on the Vite dev server, which never sends this header.
+        headers.TryAdd("Permissions-Policy", "camera=(self), microphone=(), geolocation=()");
         headers.TryAdd("Cross-Origin-Resource-Policy", "same-site");
         if (context.Request.Path.StartsWithSegments("/api"))
             headers.TryAdd("Cache-Control", "no-store");
