@@ -51,6 +51,11 @@ export function Scanner({ onResult }: { onResult: (token: string) => void }) {
     if (rafRef.current) cancelAnimationFrame(rafRef.current)
     streamRef.current?.getTracks().forEach((t) => t.stop())
     streamRef.current = null
+    const video = videoRef.current
+    if (video) {
+      video.onloadedmetadata = null
+      video.srcObject = null
+    }
     setActive(false)
   }
 
@@ -85,11 +90,35 @@ export function Scanner({ onResult }: { onResult: (token: string) => void }) {
   const openStream = async (constraints: MediaStreamConstraints) => {
     const stream = await navigator.mediaDevices.getUserMedia(constraints)
     streamRef.current = stream
-    if (videoRef.current) {
-      videoRef.current.srcObject = stream
-      await videoRef.current.play()
+
+    const video = videoRef.current
+    if (!video) {
+      // Component isn't mounted (or was torn down mid-request) — release the
+      // camera we just grabbed so it isn't left "busy", then bail.
+      stream.getTracks().forEach((t) => t.stop())
+      streamRef.current = null
+      throw new DOMException('Elementi i videos nuk është gati.', 'AbortError')
     }
+
+    video.srcObject = stream
+    // play() regularly rejects with AbortError ("play() request was interrupted
+    // by a new load request") right after srcObject is set, or with
+    // NotAllowedError under the autoplay policy — neither means the camera
+    // failed to open. Playback is best-effort: frames are pulled via
+    // requestAnimationFrame regardless, and a retry on loadedmetadata covers
+    // the case where the first play() was genuinely too early. Awaiting the
+    // rejection here was the main reason the camera "sometimes didn't open".
+    video.onloadedmetadata = () => {
+      video.play().catch(() => {})
+    }
+    try {
+      await video.play()
+    } catch {
+      /* best-effort — see comment above */
+    }
+
     setActive(true)
+    if (rafRef.current) cancelAnimationFrame(rafRef.current)
     rafRef.current = requestAnimationFrame(tick)
   }
 
@@ -104,55 +133,75 @@ export function Scanner({ onResult }: { onResult: (token: string) => void }) {
     startingRef.current = true
     setError('')
 
-    // Defensively release any stream this component instance still holds
-    // before asking for a new one — requesting a second stream without
-    // stopping the first is another common cause of the same error.
-    if (streamRef.current) {
-      streamRef.current.getTracks().forEach((t) => t.stop())
-      streamRef.current = null
-    }
-
-    // Try the rear camera first, then fall back to whatever camera the
-    // browser can give us — some webcams/drivers reject the facingMode
-    // constraint outright even though a plain `video: true` works fine.
-    const attempts: MediaStreamConstraints[] = [
-      { video: { facingMode: 'environment' }, audio: false },
-      { video: true, audio: false },
-    ]
-
-    let lastErr: unknown = null
-    for (const constraints of attempts) {
-      try {
-        await openStream(constraints)
-        startingRef.current = false
+    // Everything runs inside try/finally so `startingRef` is ALWAYS released.
+    // Previously an unexpected throw could leave it stuck `true`, after which
+    // every later click on "Hap kamerën" was silently ignored — the camera
+    // then "never opened again" until the page was refreshed.
+    try {
+      // Without a secure context (HTTPS or localhost) the browser doesn't
+      // expose `navigator.mediaDevices` at all — calling getUserMedia would
+      // throw a plain TypeError and the camera can never open. This is common
+      // when the reception/arka machine opens the app via a LAN IP over http://.
+      // Give a clear, actionable message instead of a generic failure.
+      if (!navigator.mediaDevices?.getUserMedia) {
+        setError(
+          window.isSecureContext
+            ? 'Ky browser nuk e mbështet qasjen te kamera. Përdor një version të përditësuar të Chrome/Safari ose futjen manuale më poshtë.'
+            : 'Kamera kërkon lidhje të sigurt. Hape faqen përmes HTTPS ose localhost (jo IP-je http://), ose përdor futjen manuale më poshtë.',
+        )
+        setActive(false)
         return
-      } catch (err) {
-        lastErr = err
+      }
 
-        // A transient "device busy" report right after releasing a previous
-        // track is common on macOS Chrome — the OS can take a beat to hand
-        // the camera back. One short retry clears most of these.
-        if (isBusyError(err)) {
-          await new Promise((r) => setTimeout(r, 400))
-          try {
-            await openStream(constraints)
-            startingRef.current = false
-            return
-          } catch (retryErr) {
-            lastErr = retryErr
+      // Defensively release any stream this component instance still holds
+      // before asking for a new one — requesting a second stream without
+      // stopping the first is another common cause of the same error.
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach((t) => t.stop())
+        streamRef.current = null
+      }
+
+      // Try the rear camera first, then fall back to whatever camera the
+      // browser can give us — some webcams/drivers reject the facingMode
+      // constraint outright even though a plain `video: true` works fine.
+      const attempts: MediaStreamConstraints[] = [
+        { video: { facingMode: 'environment' }, audio: false },
+        { video: true, audio: false },
+      ]
+
+      let lastErr: unknown = null
+      for (const constraints of attempts) {
+        try {
+          await openStream(constraints)
+          return
+        } catch (err) {
+          lastErr = err
+
+          // A transient "device busy" report right after releasing a previous
+          // track is common on macOS Chrome — the OS can take a beat to hand
+          // the camera back. One short retry clears most of these.
+          if (isBusyError(err)) {
+            await new Promise((r) => setTimeout(r, 400))
+            try {
+              await openStream(constraints)
+              return
+            } catch (retryErr) {
+              lastErr = retryErr
+            }
+          }
+
+          // Explicit denial won't be fixed by trying a different constraint set.
+          if (err instanceof DOMException && (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError')) {
+            break
           }
         }
-
-        // Explicit denial won't be fixed by trying a different constraint set.
-        if (err instanceof DOMException && (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError')) {
-          break
-        }
       }
-    }
 
-    setError(cameraErrorMessage(lastErr))
-    setActive(false)
-    startingRef.current = false
+      setError(cameraErrorMessage(lastErr))
+      setActive(false)
+    } finally {
+      startingRef.current = false
+    }
   }
 
   useEffect(() => () => stop(), [])
