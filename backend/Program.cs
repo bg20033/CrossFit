@@ -4,10 +4,12 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Diagnostics;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
+using Microsoft.AspNetCore.ResponseCompression;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.FileProviders;
 using Microsoft.IdentityModel.Tokens;
 using System.Diagnostics;
+using System.IO.Compression;
 using System.Text;
 using System.Threading.RateLimiting;
 using Microsoft.Extensions.Configuration;
@@ -77,6 +79,17 @@ builder.Services.Configure<ApiBehaviorOptions>(options =>
 });
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
+
+// Brotli/Gzip for JSON responses and the SPA bundle — big lists (clients,
+// invoices, attendance) shrink ~5-10x on the wire.
+builder.Services.AddResponseCompression(options =>
+{
+    options.EnableForHttps = true;
+    options.Providers.Add<BrotliCompressionProvider>();
+    options.Providers.Add<GzipCompressionProvider>();
+});
+builder.Services.Configure<BrotliCompressionProviderOptions>(o => o.Level = CompressionLevel.Fastest);
+builder.Services.Configure<GzipCompressionProviderOptions>(o => o.Level = CompressionLevel.Fastest);
 builder.Services.AddProblemDetails();
 builder.Services.AddHealthChecks();
 builder.Services.AddHttpClient();
@@ -99,7 +112,9 @@ builder.Services.AddScoped<IInventoryService, InventoryService>();
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
 if (string.IsNullOrWhiteSpace(connectionString))
     throw new InvalidOperationException("ConnectionStrings:DefaultConnection is required. Set it via env var ConnectionStrings__DefaultConnection.");
-builder.Services.AddDbContext<FitnessContext>(options =>
+// Pooled contexts skip per-request DbContext construction. Safe here: the
+// context is stateless (options-only ctor) and all query filters are static.
+builder.Services.AddDbContextPool<FitnessContext>(options =>
     options.UseMySql(connectionString, mySqlServerVersion)
 );
 
@@ -273,6 +288,7 @@ else
 }
 
 app.UseHttpsRedirection();
+app.UseResponseCompression();
 app.Use(async (context, next) =>
 {
     context.Response.OnStarting(() =>
@@ -300,7 +316,16 @@ var hasFrontendBuild = File.Exists(Path.Combine(webRoot, "index.html"));
 if (hasFrontendBuild)
 {
     app.UseDefaultFiles();
-    app.UseStaticFiles();
+    app.UseStaticFiles(new StaticFileOptions
+    {
+        OnPrepareResponse = ctx =>
+        {
+            // Vite emits content-hashed filenames under /assets — a changed file
+            // always gets a new URL, so browsers can cache these forever.
+            if (ctx.Context.Request.Path.StartsWithSegments("/assets"))
+                ctx.Context.Response.Headers.CacheControl = "public,max-age=31536000,immutable";
+        }
+    });
 }
 
 // Uploaded files (trainer photos, etc.) — served regardless of whether the SPA
@@ -310,7 +335,11 @@ Directory.CreateDirectory(uploadsPath);
 app.UseStaticFiles(new StaticFileOptions
 {
     FileProvider = new PhysicalFileProvider(uploadsPath),
-    RequestPath = "/uploads"
+    RequestPath = "/uploads",
+    OnPrepareResponse = ctx =>
+        // Uploads are written once under GUID filenames (never overwritten in
+        // place), so long-lived caching is safe.
+        ctx.Context.Response.Headers.CacheControl = "public,max-age=604800"
 });
 
 app.UseCors("App");

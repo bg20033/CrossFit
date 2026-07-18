@@ -400,15 +400,17 @@ public class FitnessContext : DbContext
         // DiscountCategory configuration
         modelBuilder.Entity<DiscountCategory>(e =>
         {
+            var builtInCreatedAt = new DateTime(2026, 7, 2, 12, 38, 23, 509, DateTimeKind.Utc).AddTicks(7010);
+
             e.HasIndex(d => d.Key).IsUnique();
             e.Property(d => d.Key).HasMaxLength(40);
             e.Property(d => d.Name).HasMaxLength(120);
             e.HasData(
-                new DiscountCategory { Id = 1, Key = "standard", Name = "Standarde", DiscountPercent = 0, IsBuiltIn = true, IsActive = true },
-                new DiscountCategory { Id = 2, Key = "police", Name = "Policia (zbritje)", DiscountPercent = 20, IsBuiltIn = true, IsActive = true },
-                new DiscountCategory { Id = 3, Key = "free", Name = "Falas (0€)", DiscountPercent = 100, IsBuiltIn = true, IsActive = true },
-                new DiscountCategory { Id = 4, Key = "shared", Name = "E ndarë (3–4)", DiscountPercent = 0, IsBuiltIn = true, IsActive = true },
-                new DiscountCategory { Id = 5, Key = "session_pass", Name = "Pako seancash", DiscountPercent = 0, IsBuiltIn = true, IsActive = true }
+                new DiscountCategory { Id = 1, Key = "standard", Name = "Standarde", DiscountPercent = 0, IsBuiltIn = true, IsActive = true, CreatedAt = builtInCreatedAt, UpdatedAt = builtInCreatedAt },
+                new DiscountCategory { Id = 2, Key = "police", Name = "Policia (zbritje)", DiscountPercent = 20, IsBuiltIn = true, IsActive = true, CreatedAt = builtInCreatedAt, UpdatedAt = builtInCreatedAt },
+                new DiscountCategory { Id = 3, Key = "free", Name = "Falas (0€)", DiscountPercent = 100, IsBuiltIn = true, IsActive = true, CreatedAt = builtInCreatedAt, UpdatedAt = builtInCreatedAt },
+                new DiscountCategory { Id = 4, Key = "shared", Name = "E ndarë (3–4)", DiscountPercent = 0, IsBuiltIn = true, IsActive = true, CreatedAt = builtInCreatedAt, UpdatedAt = builtInCreatedAt },
+                new DiscountCategory { Id = 5, Key = "session_pass", Name = "Pako seancash", DiscountPercent = 0, IsBuiltIn = true, IsActive = true, CreatedAt = builtInCreatedAt, UpdatedAt = builtInCreatedAt }
             );
         });
 

@@ -73,24 +73,14 @@ public class InventoryService : IInventoryService
         }
     }
 
-    private async Task<int> CalculateStockAsync(int productId)
-    {
-        var movements = await _context.StockMovements
+    // Signed sum runs as a single SQL CASE aggregate instead of materializing
+    // every movement row. "adjustment" is already stored with sign.
+    private async Task<int> CalculateStockAsync(int productId) =>
+        await _context.StockMovements
             .Where(s => s.ProductId == productId)
-            .Select(s => new { s.MovementType, s.Quantity })
-            .ToListAsync();
-
-        var stock = 0;
-        foreach (var m in movements)
-        {
-            stock += m.MovementType switch
-            {
-                "in" or "return" => m.Quantity,
-                "sale" => -m.Quantity,
-                "adjustment" => m.Quantity, // adjustment already stored with sign
-                _ => 0
-            };
-        }
-        return stock;
-    }
+            .SumAsync(s =>
+                s.MovementType == "in" || s.MovementType == "return" ? s.Quantity
+                : s.MovementType == "sale" ? -s.Quantity
+                : s.MovementType == "adjustment" ? s.Quantity
+                : 0);
 }

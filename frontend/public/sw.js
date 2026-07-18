@@ -1,4 +1,4 @@
-const CACHE = 'standup-crossfit-v2'
+const CACHE = 'standup-crossfit-v3'
 const APP_SHELL = ['/', '/manifest.webmanifest', '/icons/icon.svg']
 
 self.addEventListener('install', (event) => {
@@ -20,6 +20,25 @@ self.addEventListener('fetch', (event) => {
 
   if (url.pathname.startsWith('/api/')) {
     event.respondWith(fetch(req, { cache: 'no-store' }))
+    return
+  }
+
+  // Hashed bundles under /assets never change for a given URL — serve them
+  // cache-first so repeat loads skip the network entirely.
+  if (url.pathname.startsWith('/assets/')) {
+    event.respondWith(
+      caches.match(req).then(
+        (cached) =>
+          cached ||
+          fetch(req).then((res) => {
+            if (res.ok) {
+              const copy = res.clone()
+              caches.open(CACHE).then((cache) => cache.put(req, copy))
+            }
+            return res
+          })
+      )
+    )
     return
   }
 

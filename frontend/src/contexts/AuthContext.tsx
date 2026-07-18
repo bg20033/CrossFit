@@ -1,7 +1,14 @@
-import { createContext, useContext, useEffect, type ReactNode } from 'react'
+import { createContext, useContext, useEffect, useState, type ReactNode } from 'react'
 import { useAuthStore, useUIStore } from '../stores'
 import api from '../services/api'
 import { normalizeRole } from '../lib/roles'
+import {
+  getSavedAccounts,
+  getSavedAccount,
+  upsertSavedAccount,
+  removeSavedAccount,
+  type SavedAccount,
+} from '../lib/accounts'
 import type { User, UserRole } from '../types'
 
 interface AuthContextType {
@@ -12,6 +19,10 @@ interface AuthContextType {
   logout: () => void
   register: (data: { email: string; password: string; name: string; role: UserRole; phone?: string }) => Promise<void>
   refreshUser: () => Promise<void>
+  /** All sessions saved in this browser (including the active one). */
+  accounts: SavedAccount[]
+  /** Swap tokens to another saved session and reload the user. */
+  switchAccount: (id: string) => Promise<void>
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
@@ -19,30 +30,41 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined)
 export function AuthProvider({ children }: { children: ReactNode }) {
   const { user, profileId, isLoading, setUser, setLoading, logout: storeLogout } = useAuthStore()
   const setSidebarOpen = useUIStore((s) => s.setSidebarOpen)
+  const [accounts, setAccounts] = useState<SavedAccount[]>(() => getSavedAccounts())
+
+  const syncAccounts = () => setAccounts(getSavedAccounts())
+
+  /** Save the currently active session (user + tokens) into the saved-accounts list. */
+  const stashSession = (u: User | null) => {
+    const token = localStorage.getItem('authToken')
+    const refreshToken = localStorage.getItem('refreshToken')
+    if (!u || !token || !refreshToken) return
+    upsertSavedAccount({ id: String(u.id), email: u.email, name: u.name, role: u.role, token, refreshToken })
+    syncAccounts()
+  }
 
   const applyUser = async (raw: User) => {
     const normalized = { ...raw, role: normalizeRole(raw.role) as UserRole }
-    let permissions = Array.isArray(normalized.permissions) ? normalized.permissions : []
-    try {
-      permissions = await api.getPermissions()
-    } catch {
-      // /auth/me already includes permissions on supported backends; keep those.
-    }
-    
-    let pid: number | null = null
-    try {
-      if (normalized.role === 'trainer') {
-        const res = await api.getTrainerMe()
-        pid = res.data.id
-      } else if (normalized.role === 'client') {
-        const res = await api.getClientMe()
-        pid = res.data.id
-      }
-    } catch (e) {
-      // Profile-specific screens can still load without a profile id; avoid noisy dev-console errors.
-    }
-    
+
+    // login//auth/me//auth/refresh all include permissions already — only fall
+    // back to a /roles/me/permissions roundtrip when they're missing.
+    const permissionsPromise: Promise<string[]> = Array.isArray(normalized.permissions)
+      ? Promise.resolve(normalized.permissions)
+      : api.getPermissions().catch(() => [])
+
+    // Profile-specific screens can still load without a profile id; swallow errors
+    // to avoid noisy dev-console output.
+    const profileIdPromise: Promise<number | null> =
+      normalized.role === 'trainer'
+        ? api.getTrainerMe().then((res) => res.data.id as number).catch(() => null)
+        : normalized.role === 'client'
+          ? api.getClientMe().then((res) => res.data.id as number).catch(() => null)
+          : Promise.resolve(null)
+
+    const [permissions, pid] = await Promise.all([permissionsPromise, profileIdPromise])
+
     setUser({ ...normalized, permissions }, pid)
+    stashSession(normalized)
   }
 
   useEffect(() => {
@@ -67,14 +89,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const login = async (email: string, password: string) => {
-    const { user, token, refreshToken } = await api.login(email, password)
+    stashSession(user) // keep the current session so the user can switch back
+    const { user: nextUser, token, refreshToken } = await api.login(email, password)
     localStorage.setItem('authToken', token)
     localStorage.setItem('refreshToken', refreshToken)
-    await applyUser(user)
+    await applyUser(nextUser)
   }
 
   const logout = () => {
     api.logout(localStorage.getItem('refreshToken')) // revoke server-side (fire-and-forget)
+    if (user) {
+      removeSavedAccount(String(user.id))
+      syncAccounts()
+    }
     localStorage.removeItem('authToken')
     localStorage.removeItem('refreshToken')
     storeLogout()
@@ -82,10 +109,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   const register = async (data: { email: string; password: string; name: string; role: UserRole; phone?: string }) => {
-    const { user, token, refreshToken } = await api.register(data)
+    stashSession(user)
+    const { user: nextUser, token, refreshToken } = await api.register(data)
     localStorage.setItem('authToken', token)
     localStorage.setItem('refreshToken', refreshToken)
-    await applyUser(user)
+    await applyUser(nextUser)
   }
 
   const refreshUser = async () => {
@@ -99,8 +127,42 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }
 
+  const switchAccount = async (id: string) => {
+    const target = getSavedAccount(id)
+    if (!target || (user && String(user.id) === String(id))) return
+
+    const previous = { token: localStorage.getItem('authToken'), refreshToken: localStorage.getItem('refreshToken') }
+    stashSession(user)
+    localStorage.setItem('authToken', target.token)
+    localStorage.setItem('refreshToken', target.refreshToken)
+    try {
+      let nextUser: User
+      try {
+        nextUser = await api.getMe()
+      } catch {
+        // Access token expired (the interceptor skips /auth/* URLs) — refresh explicitly.
+        const refreshed = await api.refresh(target.refreshToken)
+        localStorage.setItem('authToken', refreshed.token)
+        localStorage.setItem('refreshToken', refreshed.refreshToken)
+        nextUser = refreshed.user
+      }
+      await applyUser(nextUser)
+    } catch (error) {
+      // Target session is dead — drop it and restore the previous one.
+      removeSavedAccount(id)
+      syncAccounts()
+      if (previous.token && previous.refreshToken) {
+        localStorage.setItem('authToken', previous.token)
+        localStorage.setItem('refreshToken', previous.refreshToken)
+      }
+      throw error
+    }
+  }
+
   return (
-    <AuthContext.Provider value={{ user, profileId, isLoading, login, logout, register, refreshUser }}>
+    <AuthContext.Provider
+      value={{ user, profileId, isLoading, login, logout, register, refreshUser, accounts, switchAccount }}
+    >
       {children}
     </AuthContext.Provider>
   )

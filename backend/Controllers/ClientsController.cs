@@ -156,6 +156,7 @@ public class ClientsController : ControllerBase
     public async Task<IActionResult> GetClient(int id)
     {
         var client = await _context.Clients
+            .AsNoTracking()
             .Include(c => c.User)
             .Include(c => c.Trainer).ThenInclude(t => t!.User)
             .Include(c => c.Goals)

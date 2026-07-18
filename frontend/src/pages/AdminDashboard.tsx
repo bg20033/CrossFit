@@ -1,5 +1,5 @@
+import { useEffect, useState } from 'react'
 import { ArrowDownRight, ArrowUpRight, Banknote, BarChart3, CalendarDays, CheckCircle, Dumbbell, Receipt, Sigma, User, Users, Wallet } from 'lucide-react'
-import { useQuery } from '@tanstack/react-query'
 import { useAuth } from '../contexts/AuthContext'
 import api from '../utils/api'
 import { eur, shortDate } from '../utils/format'
@@ -38,17 +38,32 @@ interface TrainingGroupRow {
 const val = (r: PromiseSettledResult<any>) => (r.status === 'fulfilled' ? r.value.data : null)
 const timeOnly = (iso: string) => new Date(iso).toLocaleTimeString('sq-AL', { hour: '2-digit', minute: '2-digit' })
 
+// One-shot fetch state with the same `.data`/`.isLoading` shape useQuery had.
+// This page was the app's only react-query consumer, and the library loaded
+// eagerly for every visitor — a local hook costs nothing.
+function useGet<T>(load: () => Promise<T>) {
+  const [state, setState] = useState<{ data: T | undefined; isLoading: boolean }>({ data: undefined, isLoading: true })
+  useEffect(() => {
+    let alive = true
+    load().then(
+      (data) => { if (alive) setState({ data, isLoading: false }) },
+      () => { if (alive) setState((s) => ({ ...s, isLoading: false })) }
+    )
+    return () => { alive = false }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+  return state
+}
+
 export default function AdminDashboard() {
   const { user } = useAuth()
 
-  const summaryQ = useQuery({
-    queryKey: ['finance', 'summary'],
-    queryFn: async () => (await api.get('/finance/summary')).data as { totalIncome: number; totalExpenses: number; balance: number },
-  })
+  const summaryQ = useGet(
+    async () => (await api.get('/finance/summary')).data as { totalIncome: number; totalExpenses: number; balance: number }
+  )
 
-  const countsQ = useQuery({
-    queryKey: ['dashboard', 'counts'],
-    queryFn: async () => {
+  const countsQ = useGet(
+    async () => {
       const r = await Promise.allSettled([
         api.get('/clients?page=1&pageSize=1'),
         api.get('/staff?page=1&pageSize=1'),
@@ -61,35 +76,30 @@ export default function AdminDashboard() {
         trainers: val(r[2])?.total ?? 0,
         groups: Array.isArray(val(r[3])) ? val(r[3]).length : 0,
       }
-    },
-  })
+    }
+  )
 
-  const txQ = useQuery({
-    queryKey: ['finance', 'transactions', 6],
-    queryFn: async () => ((await api.get('/finance/transactions?page=1&pageSize=6')).data.transactions ?? []) as Tx[],
-  })
+  const txQ = useGet(
+    async () => ((await api.get('/finance/transactions?page=1&pageSize=6')).data.transactions ?? []) as Tx[]
+  )
 
-  const pendingQ = useQuery({
-    queryKey: ['invoice', 'pending'],
-    queryFn: async () => {
+  const pendingQ = useGet(
+    async () => {
       const d = (await api.get('/invoice/pending')).data
       return (Array.isArray(d) ? d : []) as PendingInvoice[]
-    },
-  })
+    }
+  )
 
-  const weekdayQ = useQuery({
-    queryKey: ['attendance', 'overview', 'byWeekday'],
-    queryFn: async () => ((await api.get('/attendance/overview')).data?.byWeekday ?? {}) as Record<string, number>,
-  })
+  const weekdayQ = useGet(
+    async () => ((await api.get('/attendance/overview')).data?.byWeekday ?? {}) as Record<string, number>
+  )
 
-  const groupsQ = useQuery({
-    queryKey: ['traininggroups', 'dashboard'],
-    queryFn: async () => ((await api.get('/traininggroups')).data ?? []) as TrainingGroupRow[],
-  })
+  const groupsQ = useGet(
+    async () => ((await api.get('/traininggroups')).data ?? []) as TrainingGroupRow[]
+  )
 
-  const monthlyQ = useQuery({
-    queryKey: ['finance', 'monthly6'],
-    queryFn: async () => {
+  const monthlyQ = useGet(
+    async () => {
       const now = new Date()
       const months = Array.from({ length: 6 }, (_, k) => {
         const d = new Date(now.getFullYear(), now.getMonth() - (5 - k), 1)
@@ -100,8 +110,8 @@ export default function AdminDashboard() {
         const d = val(r)
         return { label: MONTHS[months[i].month - 1], income: d?.income?.total ?? 0, expense: d?.expenses?.total ?? 0 }
       })
-    },
-  })
+    }
+  )
 
   const summary = summaryQ.data ?? { totalIncome: 0, totalExpenses: 0, balance: 0 }
   const counts = countsQ.data ?? { clients: 0, staff: 0, trainers: 0, groups: 0 }

@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Memory;
 using StandUpFitness.Data;
 using StandUpFitness.Models;
 
@@ -18,15 +19,36 @@ namespace StandUpFitness.Controllers;
 public class PublicController : ControllerBase
 {
     private readonly FitnessContext _context;
+    private readonly IMemoryCache _cache;
 
-    public PublicController(FitnessContext context) => _context = context;
+    // Publike dhe e njëjtë për të gjithë — 60s cache i mjafton trafikut të landing-ut
+    // pa e vonuar dukshëm shfaqjen e trajnerëve/pakove të reja.
+    private const string LandingCacheKey = "public-landing";
+    private static readonly TimeSpan LandingCacheTtl = TimeSpan.FromSeconds(60);
+
+    public PublicController(FitnessContext context, IMemoryCache cache)
+    {
+        _context = context;
+        _cache = cache;
+    }
 
     [HttpGet("landing")]
     public async Task<IActionResult> Landing()
     {
+        var payload = await _cache.GetOrCreateAsync(LandingCacheKey, async entry =>
+        {
+            entry.AbsoluteExpirationRelativeToNow = LandingCacheTtl;
+            return await BuildLandingPayloadAsync();
+        });
+        return Ok(payload);
+    }
+
+    private async Task<object> BuildLandingPayloadAsync()
+    {
         var trainers = await _context.Trainers
             .Where(t => t.User.IsActive && t.User.Role == UserRole.Trainer && t.IsAvailable)
-            .OrderBy(t => t.CreatedAt)
+            .OrderBy(t => t.User.Name == "Onufer Veselaj" ? 0 : 1)
+            .ThenBy(t => t.CreatedAt)
             .Select(t => new
             {
                 t.Id,
@@ -57,6 +79,6 @@ public class PublicController : ControllerBase
             })
             .ToListAsync();
 
-        return Ok(new { trainers, plans });
+        return new { trainers, plans };
     }
 }

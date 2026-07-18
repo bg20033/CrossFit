@@ -69,9 +69,13 @@ export default function About() {
               <div>
                 <div className="mb-1.5 text-sm font-bold">Na kontakto</div>
                 <div className="text-[14.5px] leading-normal text-[#5C5346]">
-                  info@standupcrossfit.com
+                  <a href="mailto:standupcrossfit.ks@gmail.com" className="transition hover:text-clay">
+                    standupcrossfit.ks@gmail.com
+                  </a>
                   <br />
-                  +383 44 000 000
+                  <a href="tel:+38348481159" className="transition hover:text-clay">
+                    +383 48 481 159
+                  </a>
                 </div>
               </div>
             </div>

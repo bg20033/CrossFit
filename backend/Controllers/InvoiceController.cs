@@ -220,6 +220,7 @@ public class InvoiceController : ControllerBase
     public async Task<IActionResult> SuggestForClient([FromQuery] int clientId)
     {
         var client = await _context.Clients
+            .AsNoTracking()
             .Include(c => c.Groups).ThenInclude(g => g.ScheduleSlots)
             .FirstOrDefaultAsync(c => c.Id == clientId);
 
@@ -227,6 +228,7 @@ public class InvoiceController : ControllerBase
             return NotFound(new { message = "Client not found" });
 
         var allGroups = await _context.TrainingGroups
+            .AsNoTracking()
             .Include(g => g.Clients)
             .Include(g => g.ScheduleSlots)
             .ToListAsync();

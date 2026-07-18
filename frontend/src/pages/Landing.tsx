@@ -137,6 +137,27 @@ function resolvedPhoto(url: string | null) {
 
 const durationLabel = (d: number) => (d >= 28 && d <= 31 ? '/muaj' : d >= 360 && d <= 370 ? '/vit' : ` / ${d} ditë`)
 
+// Kartela e trajnerit me të gjitha të dhënat publike (modali i profilit).
+interface CoachCard {
+  name: string
+  role: string
+  tag: string
+  bio: string
+  workExperience: string
+  certifications: string
+  trainings: string
+  bg: string
+}
+
+const coachHasDetails = (c: CoachCard) => !!(c.bio || c.workExperience || c.certifications || c.trainings)
+
+// "CrossFit Level 2, Olympic Lifting" → chips të veçanta.
+const splitList = (s: string) =>
+  s
+    .split(/[,;\n•]/)
+    .map((x) => x.trim())
+    .filter(Boolean)
+
 const planFeatures = (p: PublicPlan) => [
   p.sessionsTotal && p.sessionsTotal > 0 ? `${p.sessionsTotal} seanca të përfshira` : 'Klasa grupi pa limit',
   'Tracking i progresit & qëllimeve në aplikacion',
@@ -165,7 +186,16 @@ export default function Landing() {
   const [submitted, setSubmitted] = useState(false)
   const [liveTrainers, setLiveTrainers] = useState<PublicTrainer[]>([])
   const [livePlans, setLivePlans] = useState<PublicPlan[]>([])
+  const [selectedCoach, setSelectedCoach] = useState<CoachCard | null>(null)
   const { hash } = useLocation()
+
+  // Mbyll profilin e trajnerit me Escape.
+  useEffect(() => {
+    if (!selectedCoach) return
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && setSelectedCoach(null)
+    document.addEventListener('keydown', onKey)
+    return () => document.removeEventListener('keydown', onKey)
+  }, [selectedCoach])
 
   // Trajnerët dhe pakot reale — statiket mbeten fallback.
   useEffect(() => {
@@ -175,18 +205,21 @@ export default function Landing() {
     }).catch(() => {})
   }, [])
 
-  const coachList = liveTrainers.length > 0
+  const coachList: CoachCard[] = liveTrainers.length > 0
     ? liveTrainers.map((t, i) => {
         const photo = resolvedPhoto(t.photoUrl)
         return {
           name: t.name,
           role: t.title || (t.trainerType === 'personal' ? 'Trajner Personal' : 'Trajner'),
           tag: t.specialization || 'CrossFit',
-          bio: t.bio || t.workExperience || t.certifications || '',
+          bio: t.bio || '',
+          workExperience: t.workExperience || '',
+          certifications: t.certifications || '',
+          trainings: t.trainings || '',
           bg: photo ? `url('${photo}')` : img(coachImgIds[i % coachImgIds.length]),
         }
       })
-    : coaches.map((c) => ({ ...c, bio: '' }))
+    : coaches.map((c) => ({ ...c, bio: '', workExperience: '', certifications: '', trainings: '' }))
   const usingLivePlans = livePlans.length > 0
   // "Më i kërkuari" = pako e mesme sipas çmimit (vjen e renditur nga API).
   const popularIdx = usingLivePlans && livePlans.length >= 3 ? Math.floor(livePlans.length / 2) : -1
@@ -352,18 +385,36 @@ export default function Landing() {
             </p>
           </div>
           <div className="mx-auto flex max-w-[980px] flex-wrap justify-center gap-x-8 gap-y-10">
-            {coachList.map((c) => (
-              <div key={c.name} className="w-[168px] text-center sm:w-[188px]">
+            {coachList.map((c) => {
+              const hasDetails = coachHasDetails(c)
+              return (
                 <div
-                  className="mb-4 aspect-[3/4] rounded-2xl bg-[#CFC4B0] bg-cover bg-center shadow-[0_18px_34px_-20px_rgba(36,31,24,0.45)] ring-1 ring-cocoa/5"
-                  style={{ backgroundImage: c.bg }}
-                />
-                <h3 className="font-newsreader text-[19px] font-medium">{c.name}</h3>
-                <div className="mb-1 text-[13px] font-semibold text-clay">{c.role}</div>
-                <div className="text-[13px] text-[#5C5346]">{c.tag}</div>
-                {c.bio && <p className="mt-1.5 line-clamp-2 text-[12.5px] leading-snug text-[#6E6456]">{c.bio}</p>}
-              </div>
-            ))}
+                  key={c.name}
+                  onClick={hasDetails ? () => setSelectedCoach(c) : undefined}
+                  className={`group w-[168px] text-center sm:w-[188px] ${hasDetails ? 'cursor-pointer' : ''}`}
+                >
+                  <div className="mb-4 aspect-[3/4] overflow-hidden rounded-2xl shadow-[0_18px_34px_-20px_rgba(36,31,24,0.45)] ring-1 ring-cocoa/5">
+                    <div
+                      className="h-full w-full bg-[#CFC4B0] bg-cover bg-center transition-transform duration-300 group-hover:scale-[1.04]"
+                      style={{ backgroundImage: c.bg }}
+                    />
+                  </div>
+                  <h3 className="font-newsreader text-[19px] font-medium">{c.name}</h3>
+                  <div className="mb-1 text-[13px] font-semibold text-clay">{c.role}</div>
+                  <div className="text-[13px] text-[#5C5346]">{c.tag}</div>
+                  {(c.bio || c.workExperience) && (
+                    <p className="mt-1.5 line-clamp-2 text-[12.5px] leading-snug text-[#6E6456]">
+                      {c.bio || c.workExperience}
+                    </p>
+                  )}
+                  {hasDetails && (
+                    <span className="mt-2 inline-block text-[12.5px] font-semibold text-clay transition group-hover:underline">
+                      Shiko profilin →
+                    </span>
+                  )}
+                </div>
+              )
+            })}
           </div>
         </div>
       </section>
@@ -556,7 +607,6 @@ export default function Landing() {
               className="mb-6 aspect-video rounded-2xl bg-[#CFC4B0] bg-cover bg-center"
               style={{ backgroundImage: img('photo-1526401485004-46910ecc8e51', 900) }}
             />
-            {/* TODO: zëvendëso me adresën dhe kontaktet reale kur t'i kesh. */}
             <div className="flex flex-wrap gap-8">
               <div>
                 <div className="mb-1.5 text-sm font-bold">Lokacioni</div>
@@ -575,9 +625,13 @@ export default function Landing() {
               <div>
                 <div className="mb-1.5 text-sm font-bold">Na kontakto</div>
                 <div className="text-[14.5px] leading-normal text-[#5C5346]">
-                  info@standupcrossfit.com
+                  <a href="mailto:standupcrossfit.ks@gmail.com" className="transition hover:text-clay">
+                    standupcrossfit.ks@gmail.com
+                  </a>
                   <br />
-                  +383 44 000 000
+                  <a href="tel:+38348481159" className="transition hover:text-clay">
+                    +383 48 481 159
+                  </a>
                 </div>
               </div>
             </div>
@@ -644,6 +698,111 @@ export default function Landing() {
           </form>
         </div>
       </section>
+
+      {/* PROFILI I TRAJNERIT */}
+      {selectedCoach && (
+        <div
+          className="fixed inset-0 z-50 flex items-end justify-center bg-cocoa/60 backdrop-blur-sm sm:items-center sm:p-6"
+          onClick={() => setSelectedCoach(null)}
+        >
+          <div
+            className="max-h-[92vh] w-full max-w-[720px] overflow-y-auto rounded-t-[26px] bg-cream p-6 shadow-[0_40px_80px_-30px_rgba(36,31,24,0.6)] sm:rounded-[26px] sm:p-9"
+            onClick={(e) => e.stopPropagation()}
+            role="dialog"
+            aria-modal="true"
+            aria-label={`Profili i ${selectedCoach.name}`}
+          >
+            <div className="mb-5 flex items-start justify-between gap-4">
+              <div>
+                <Eyebrow>{selectedCoach.role}</Eyebrow>
+                <h3 className="font-newsreader text-[clamp(26px,3vw,34px)] font-normal leading-[1.05] tracking-[-0.02em]">
+                  {selectedCoach.name}
+                </h3>
+              </div>
+              <button
+                onClick={() => setSelectedCoach(null)}
+                aria-label="Mbyll"
+                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-cocoa/15 text-xl text-cocoa transition hover:bg-cocoa/5"
+              >
+                ×
+              </button>
+            </div>
+
+            <div className="grid gap-7 sm:grid-cols-[220px_1fr]">
+              <div>
+                <div
+                  className="aspect-[3/4] rounded-2xl bg-[#CFC4B0] bg-cover bg-center ring-1 ring-cocoa/5"
+                  style={{ backgroundImage: selectedCoach.bg }}
+                />
+                <div className="mt-3 flex justify-center sm:justify-start">
+                  <LevelPill>{selectedCoach.tag}</LevelPill>
+                </div>
+              </div>
+
+              <div className="flex flex-col gap-5">
+                {selectedCoach.bio && (
+                  <p className="text-[15.5px] leading-relaxed text-[#5C5346]">{selectedCoach.bio}</p>
+                )}
+
+                {selectedCoach.workExperience && (
+                  <div>
+                    <div className="mb-1.5 text-[13px] font-bold uppercase tracking-[0.14em] text-clay">
+                      Përvoja e punës
+                    </div>
+                    <p className="whitespace-pre-line text-[14.5px] leading-relaxed text-[#5C5346]">
+                      {selectedCoach.workExperience}
+                    </p>
+                  </div>
+                )}
+
+                {selectedCoach.certifications && (
+                  <div>
+                    <div className="mb-2 text-[13px] font-bold uppercase tracking-[0.14em] text-clay">
+                      Çertifikatat
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      {splitList(selectedCoach.certifications).map((cert) => (
+                        <span
+                          key={cert}
+                          className="rounded-full border border-olive/35 px-3 py-[5px] text-xs font-semibold text-olive"
+                        >
+                          {cert}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {selectedCoach.trainings && (
+                  <div>
+                    <div className="mb-2 text-[13px] font-bold uppercase tracking-[0.14em] text-clay">
+                      Trajnimet
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      {splitList(selectedCoach.trainings).map((tr) => (
+                        <span
+                          key={tr}
+                          className="rounded-full border border-cocoa/20 px-3 py-[5px] text-xs font-semibold text-[#5C5346]"
+                        >
+                          {tr}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                <a
+                  href="#contact"
+                  onClick={() => setSelectedCoach(null)}
+                  className="mt-1 self-start rounded-full bg-clay px-6 py-3 text-[14.5px] font-semibold text-cream transition hover:bg-clay/90"
+                >
+                  Rezervo klasë me {selectedCoach.name.split(' ')[0]}
+                </a>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

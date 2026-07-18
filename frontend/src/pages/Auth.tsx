@@ -20,7 +20,7 @@ export default function Auth({ initialMode = 'login' }: { initialMode?: Mode }) 
   })
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
-  const { login, register } = useAuth()
+  const { login, register, user } = useAuth()
   const navigate = useNavigate()
 
   const isLogin = mode === 'login'
@@ -95,6 +95,13 @@ export default function Auth({ initialMode = 'login' }: { initialMode?: Mode }) 
               Regjistrohu
             </button>
           </div>
+
+          {user && (
+            <div className="mb-4 rounded-lg border border-gray-200 bg-gray-50 px-4 py-2.5 text-sm text-gray-600">
+              Je i kyçur si <strong>{user.name}</strong>. Kyçja me një llogari tjetër e ruan këtë sesion — mund të
+              ndërrosh mes llogarive nga menyja lart djathtas.
+            </div>
+          )}
 
           {error && (
             <div className="mb-4 rounded-lg border border-gray-300 bg-gray-100 px-4 py-2.5 text-sm text-gray-800">

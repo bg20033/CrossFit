@@ -106,6 +106,13 @@ public class InventoryController : ControllerBase
 
         _context.Products.Add(product);
         await _context.SaveChangesAsync();
+
+        if (request.InitialStock > 0)
+        {
+            await _inventory.AddStockAsync(product.Id, request.InitialStock, request.CostPrice, "Stoku fillestar", User.CurrentUserId());
+            await _context.SaveChangesAsync();
+        }
+
         return Ok(new { product.Id, product.Name });
     }
 
@@ -169,6 +176,40 @@ public class InventoryController : ControllerBase
         return Ok(new { message = "Stock added", currentStock = stock });
     }
 
+    [HttpPost("products/{id:int}/adjust")]
+    [Authorize(Policy = "AdminOnly")]
+    public async Task<IActionResult> AdjustStock(int id, [FromBody] AdjustStockRequest request)
+    {
+        if (request.Delta == 0) return BadRequest(new { message = "Delta must be non-zero" });
+
+        var product = await _context.Products.FindAsync(id);
+        if (product == null) return NotFound();
+
+        var stock = await _inventory.CurrentStockAsync(id);
+        if (stock + request.Delta < 0)
+            return BadRequest(new { message = $"Stoku nuk mund të bjerë nën zero (aktual: {stock})" });
+
+        if (request.Delta > 0)
+        {
+            await _inventory.AddStockAsync(id, request.Delta, request.UnitCost, request.Notes, User.CurrentUserId());
+        }
+        else
+        {
+            _context.StockMovements.Add(new StockMovement
+            {
+                ProductId = id,
+                MovementType = "adjustment",
+                Quantity = request.Delta, // adjustment is stored with sign
+                Notes = request.Notes,
+                StaffId = User.CurrentUserId()
+            });
+            product.UpdatedAt = DateTime.UtcNow;
+        }
+
+        await _context.SaveChangesAsync();
+        return Ok(new { message = "Stock adjusted", currentStock = stock + request.Delta });
+    }
+
     [HttpGet("products/{id:int}/movements")]
     [Authorize(Policy = "AdminOnly")]
     public async Task<IActionResult> GetMovements(int id)
@@ -205,6 +246,15 @@ public class ProductRequest
     [Range(0, 1_000_000)] public decimal? CostPrice { get; set; }
     [Range(0, int.MaxValue)] public int LowStockThreshold { get; set; } = 10;
     public bool IsActive { get; set; } = true;
+    /// Optional starting quantity recorded as a stock-in when the product is created.
+    [Range(0, int.MaxValue)] public int InitialStock { get; set; } = 0;
+}
+
+public class AdjustStockRequest
+{
+    [Range(int.MinValue, int.MaxValue)] public int Delta { get; set; }
+    [Range(0, 1_000_000)] public decimal? UnitCost { get; set; }
+    [MaxLength(300)] public string? Notes { get; set; }
 }
 
 public class StockInRequest
